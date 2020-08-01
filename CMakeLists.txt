@@ -2,10 +2,11 @@ cmake_minimum_required(VERSION 2.8)
 project(fluent-bit)
 
 # Fluent Bit Version
+set(FLB_VERSION_ADOBE  "0.0.5-adobe")
 set(FLB_VERSION_MAJOR  1)
 set(FLB_VERSION_MINOR  4)
 set(FLB_VERSION_PATCH  6)
-set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}")
+set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}-${FLB_VERSION_ADOBE}")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -164,6 +165,7 @@ option(FLB_FILTER_THROTTLE    "Enable throttle filter"              Yes)
 option(FLB_FILTER_NEST        "Enable nest filter"                  Yes)
 option(FLB_FILTER_LUA         "Enable Lua scripting filter"         Yes)
 option(FLB_FILTER_RECORD_MODIFIER "Enable record_modifier filter"   Yes)
+option(FLB_FILTER_PLATFORM_LOG    "Enable platform_log filter"      Yes)
 
 # Enable all features
 if(FLB_ALL)
