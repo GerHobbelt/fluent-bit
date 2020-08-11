@@ -231,11 +231,19 @@ int load_data(struct platform_log_ctx *ctx)
 
     ret = k8s_pl_list(ctx->k8s, &buf, &size);
     flb_plg_debug(ctx->ins, "k8s_pl_list result %i", ret);
+    if (ret != 200) {
+        return -1;
+    }
 
     msgpack_unpacked result;
     size_t off = 0;
     msgpack_unpacked_init(&result);
-    msgpack_unpack_next(&result, buf, size, &off);
+    ret = msgpack_unpack_next(&result, buf, size, &off);
+    flb_plg_debug(ctx->ins, "msgpack_unpack_next %i", ret);
+    if (ret != MSGPACK_UNPACK_SUCCESS) {
+        flb_free(buf);
+        return -1;
+    }
 
     // we should have a MSGPACK_OBJECT_MAP (7) now.
     // iterate to find the keys.
@@ -251,9 +259,11 @@ int load_data(struct platform_log_ctx *ctx)
     }
 
     ctx->updated = time(NULL);
-    set_resource_version(ctx, &result.data);
+    ret = set_resource_version(ctx, &result.data);
+    flb_plg_debug(ctx->ins, "set_resource_version %i", ret);
 
     msgpack_unpacked_destroy(&result);
+    flb_free(buf);
 
     flb_plg_debug(ctx->ins, "load completed=%i resource_version=%s", ctx->updated, ctx->rv);
 
@@ -419,6 +429,8 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     ctx->key = NULL;
     ctx->key_len = 0;
 
+    ctx->rv = NULL;
+
     /* Iterate all filter properties */
     // TODO: change this to use flb_filter_get_property
     mk_list_foreach(head, &ctx->ins->properties) {
@@ -495,7 +507,8 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     }
 
     /* Set the alias name */
-    ret = flb_input_set_property(ins, "alias", ctx->emitter_name);
+    // ret = flb_input_set_property(ins, "alias", ctx->emitter_name);
+    ret = flb_input_set_property(ins, "alias", emitter_name);
     if (ret == -1) {
         flb_plg_warn(ctx->ins,
                      "cannot set emitter_name, using fallback name '%s'",
@@ -503,9 +516,9 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     }
 
     /* Set the emitter_mem_buf_limit */
-    if(ctx->emitter_mem_buf_limit > 0) {
-        ins->mem_buf_limit = ctx->emitter_mem_buf_limit;
-    }
+    // if(ctx->emitter_mem_buf_limit > 0) {
+    //     ins->mem_buf_limit = ctx->emitter_mem_buf_limit;
+    // }
 
     /* Set the storage type */
     ret = flb_input_set_property(ins, "storage.type", emitter_storage_type);
@@ -557,94 +570,13 @@ static void teardown(struct platform_log_ctx *ctx)
     flb_input_instance_exit(ctx->ins_emitter, ctx->config);
     flb_input_instance_destroy(ctx->ins_emitter);
 
+    flb_free(ctx->rv);
     k8s_destroy(ctx->k8s);
     flb_free(ctx->key);
     cache_destroy(ctx->cache);
     flb_plg_info(ctx->ins, "stopped");
 }
 
-/*static*/ inline int extract_fqdn_str(const char* log, int log_size,
-                               const char **fqdn, size_t *fqdn_size,
-                               struct platform_log_ctx *ctx)
-{
-    int ret = 0;
-    int r;
-    int tokens_size = 48; // flat json with 21 properties; should be 43 tokens max
-    jsmn_parser parser;
-    jsmntok_t *t;
-    jsmntok_t *tokens;
-
-    const char *json_key;
-    const char *json_val;
-    int json_key_len;
-    int json_val_len;
-
-    jsmn_init(&parser);
-    tokens = flb_calloc(1, sizeof(jsmntok_t) * tokens_size);
-    if (!tokens) {
-        flb_errno();
-        return 0;
-    }
-
-    flb_plg_debug(ctx->ins, "(fqdn) input '%.*s'", log_size, log);
-
-    r = jsmn_parse(&parser, log, log_size, tokens, tokens_size);
-    if (r <= 0) {
-        flb_plg_debug(ctx->ins, "(fqdn) ERROR (not json)");
-        flb_free(tokens);
-        return 0;
-    }
-
-    t = &tokens[0];
-    if (t->type != JSMN_OBJECT) {
-        flb_plg_debug(ctx->ins, "(fqdn) ERROR (invalid json)");
-        flb_free(tokens);
-        return 0;
-    }
-
-    flb_plg_debug(ctx->ins, "(fqdn) nb json tokens %i", r);
-
-    /* Parse JSON tokens */
-    for (int i = 1; i < r; i++) {
-        t = &tokens[i];
-
-        // We have a flat json, so all tokens should be "string"
-        if (t->type != JSMN_STRING) {
-            flb_plg_debug(ctx->ins, "(fqdn) ERROR (not envoy)");
-            break;
-        }
-
-        if (t->start == -1 || t->end == -1 || (t->start == 0 && t->end == 0)) {
-            break;
-        }
-
-        /* Key */
-        json_key = log + t->start;
-        json_key_len = (t->end - t->start);
-
-        if (key_cmp(json_key, json_key_len, PLATFORM_LOG_FQDN_KEY) == 0) {
-            /* Value */
-            i++;
-            t = &tokens[i];
-            json_val = log + t->start;
-            json_val_len = (t->end - t->start);
-
-            flb_plg_debug(ctx->ins, "(fqdn) extracted '%.*s'", json_val_len, json_val);
-
-            *fqdn = json_val;
-            *fqdn_size = json_val_len;
-
-            ret = 1;
-            break;
-        } else {
-            i++; // go to the next "key"
-        }
-    }
-
-    flb_free(tokens);
-
-    return ret;
-}
 
 // TODO: return fqdn as a msgpack_object?
 static inline int extract_fqdn(msgpack_object* log,
@@ -707,7 +639,7 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
     /* first pass - check if the records was re-emitted */
     for (i = 0; i < map.via.map.size; i++) {
         key = &(kv+i)->key;
-        val = &(kv+i)->val;
+        // val = &(kv+i)->val;
         if (key_cmp(key->via.str.ptr, key->via.str.size, PLATFORM_LOG_INDEX_KEY) == 0) {
             flb_plg_debug(ctx->ins, "(envoy) found re-emitted record, exit");
             return 0;

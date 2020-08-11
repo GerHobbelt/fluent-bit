@@ -104,6 +104,11 @@ struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *
     char *tk = NULL;
     size_t tk_size = 0;
     ret = file_to_buffer(k8s->token_file, &tk, &tk_size);
+    if (ret != 0) {
+        flb_free(tk);
+        k8s_destroy(k8s);
+        return NULL;
+    }
 
     k8s->auth = flb_malloc(tk_size + 32);
     k8s->auth_len = snprintf(k8s->auth, tk_size + 32, "Bearer %s", tk);
@@ -186,6 +191,11 @@ int k8s_http_get(struct k8s_conf *k8s, const char *uri, char **out_buf, size_t *
                         NULL, 0,  //body / body_len
                         NULL, 0,  //host / port
                         NULL, 0); //proxy / flags
+    if (!c) {
+        flb_error("count not create http client");
+        flb_upstream_conn_release(u_conn);
+        return -1;
+    }
 
     flb_http_buffer_size(c, 32768/*ctx->buffer_size*/); //TODO
     flb_http_add_header(c, "User-Agent", 10, "Fluent-Bit", 10);
@@ -196,26 +206,31 @@ int k8s_http_get(struct k8s_conf *k8s, const char *uri, char **out_buf, size_t *
     size_t b_sent;
 
     ret = flb_http_do(c, &b_sent);
+    if (ret != 0) {
+        return -1;
+    }
     flb_plg_debug(k8s->ins, "http_do=%i, HTTP Status=%i", ret, c->resp.status);
     // fprintf(stderr, "%.*s", (int)c->resp.payload_size, c->resp.payload);
 
-    *out_buf   = c->resp.payload;
+    char *ret_buf;
+    ret_buf = flb_malloc(c->resp.payload_size);
+    memcpy(ret_buf, c->resp.payload, c->resp.payload_size);
+
+    ret        = c->resp.status;
+    *out_buf   = ret_buf;
     *out_bytes = c->resp.payload_size;
 
     flb_http_client_destroy(c);
     flb_upstream_conn_release(u_conn);
 
-    if (ret == 0) {
-        return c->resp.status;
-    }
-    return -1;
+    return ret;
 }
 
 int k8s_pl_list(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
 {
     int ret;
     int root_type;
-    int packed = -1;
+    int packed;
     char *resp;
     size_t resp_size;
     char *buf;
@@ -229,7 +244,7 @@ int k8s_pl_list(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
     // TODO: use flb_pack_json_state() for big json
     packed = flb_pack_json(resp, resp_size, &buf, &size, &root_type);
     flb_plg_debug(k8s->ins, "(list) flb_pack_json result: %i", packed);
-
+    flb_free(resp);
     if (packed == -1) {
         return -1;
     }
@@ -248,7 +263,7 @@ int k8s_pl_delta(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
 int k8s_pl_delta_wip(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
 {
     int ret;
-    int packed = -1;
+    int packed;
     int root_type;
     char *buf;
     size_t size;
@@ -265,10 +280,11 @@ int k8s_pl_delta_wip(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
 
     tmp_len = strlen(PLATFORM_LOG_K8S_WATCH_API_FMT) + strlen(rv);
     uri = flb_malloc(tmp_len);
-    ret = snprintf(uri, tmp_len - 1, PLATFORM_LOG_K8S_WATCH_API_FMT, rv);
+    snprintf(uri, tmp_len - 1, PLATFORM_LOG_K8S_WATCH_API_FMT, rv);
 
     ret = k8s_http_get(k8s, uri, &pl_stream, &pl_stream_size);
     if (ret == -1) {
+        flb_free(uri);
         return -1;
     }
 
@@ -283,6 +299,9 @@ int k8s_pl_delta_wip(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
     // TODO: realloc; if same pointer, memmove / memset
     pl_json_size = pl_stream_size + 2;
     pl_json = flb_malloc(pl_json_size * sizeof(char));
+    if (!pl_json) {
+        return -1;
+    }
     strncat(pl_json, "[", 1);
     strncat(pl_json, pl_stream, pl_stream_size);
     strncat(pl_json, "]", 1);

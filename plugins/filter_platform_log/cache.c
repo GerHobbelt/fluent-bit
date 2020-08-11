@@ -14,6 +14,10 @@ struct cache *cache_create(struct flb_filter_instance *ins, size_t size, int max
     struct cache *cache;
 
     cache = flb_malloc(sizeof(struct cache));
+    if (!cache) {
+        flb_errno();
+        return NULL;
+    }
     // NOTE: we should use FLB_HASH_EVICT_LESS_USED
     // but it's not implemented...
     cache->_hash = flb_hash_create(FLB_HASH_EVICT_RANDOM, size, max_size);
@@ -29,6 +33,7 @@ struct cache *cache_create(struct flb_filter_instance *ins, size_t size, int max
 void cache_destroy(struct cache *cache)
 {
     flb_hash_destroy(cache->_hash);
+    flb_free(cache);
 }
 
 int cache_add(struct cache *cache, const char *key, int key_len, msgpack_object *value)

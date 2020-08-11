@@ -16,9 +16,10 @@ A stands for Adobe's changes
 
 # Log
 
-## 1.5.3-0.0.5-adobe
+## 1.5.3-0.1.0-adobe
 
 - built from v1.5.3
+- various fixups
 
 ## 1.5.2-0.0.5-adobe
 
