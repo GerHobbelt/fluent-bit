@@ -6,6 +6,8 @@ set(FLB_VERSION_MAJOR  1)
 set(FLB_VERSION_MINOR  5)
 set(FLB_VERSION_PATCH  3)
 set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}")
+set(FLB_VERSION_ADOBE  "0.0.5-adobe")
+set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}-${FLB_VERSION_ADOBE}")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -187,6 +189,7 @@ option(FLB_FILTER_THROTTLE_SIZE "Enable throttle size filter"        No)
 option(FLB_FILTER_NEST        "Enable nest filter"                  Yes)
 option(FLB_FILTER_LUA         "Enable Lua scripting filter"         Yes)
 option(FLB_FILTER_RECORD_MODIFIER "Enable record_modifier filter"   Yes)
+option(FLB_FILTER_PLATFORM_LOG    "Enable platform_log filter"      Yes)
 
 # Debug callbacks
 option(FLB_HTTP_CLIENT_DEBUG  "Enable HTTP Client debug callbacks"   No)
