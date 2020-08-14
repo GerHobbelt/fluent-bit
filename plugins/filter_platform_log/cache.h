@@ -16,7 +16,8 @@ void cache_destroy(struct cache *cache);
 int cache_add(struct cache *cache, const char *key, int key_len, msgpack_object *value);
 int cache_del(struct cache *cache, const char *key);
 
-int cache_get(struct cache *cache, const char *key, int key_len, msgpack_object *value);
+int cache_get(struct cache *cache, const char *key, int key_len,
+                                   const char **val, int *val_len);
 
 int cache_size(struct cache *cache);
 int cache_clear(struct cache *cache);

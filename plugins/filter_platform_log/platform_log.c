@@ -607,9 +607,73 @@ static inline int extract_fqdn(msgpack_object* log,
     return 0;
 }
 
+/* re-pack the entire object and re-emit it */
+static inline int re_emit(msgpack_object ts, msgpack_object map,
+                          msgpack_object info,
+                          struct platform_log_ctx *ctx)
+{
+    int i;
+    msgpack_object_kv *kv = map.via.map.ptr;
+
+    flb_plg_debug(ctx->ins, "(emit) found useful record, re-emitting (NEW)");
+
+    /* info is a map: {index=>"idx", name=>"server"} */
+    /* add the index, use the name as a tag to re-emit the record */
+    msgpack_object *index, *name;
+    index = helper_msgpack_map_get("index", &info.via.map);
+    name = helper_msgpack_map_get("name", &info.via.map);
+
+    if (!(index && name)) {
+        flb_plg_debug(ctx->ins, "(emit) no splunk info, ignoring...");
+        return 0;
+    }
+
+    msgpack_sbuffer sbuf;
+    msgpack_packer packer;
+    // char *out_tag = "lrtag"; // should be the index!
+
+    msgpack_sbuffer_init(&sbuf);
+    msgpack_packer_init(&packer, &sbuf, msgpack_sbuffer_write);
+
+    /* repack with the additional info */
+    msgpack_pack_array(&packer, 2);
+    msgpack_pack_object(&packer, ts);
+
+    /* existing map + index map (from info map) + src map */
+    msgpack_pack_map(&packer, map.via.map.size + 2);
+
+    /* existing map */
+    for (i = 0; i < map.via.map.size; i++) {
+        msgpack_pack_object(&packer, (kv+i)->key);
+        msgpack_pack_object(&packer, (kv+i)->val);
+    }
+
+    /* info map */
+    msgpack_pack_str(&packer, PLATFORM_LOG_INDEX_KEY_LEN);
+    msgpack_pack_str_body(&packer, PLATFORM_LOG_INDEX_KEY, PLATFORM_LOG_INDEX_KEY_LEN);
+    msgpack_pack_str(&packer, index->via.str.size);
+    msgpack_pack_str_body(&packer, index->via.str.ptr, index->via.str.size);
+
+
+    /* src map */
+    // TODO: cache this in ctx?
+    msgpack_pack_str(&packer, PLATFORM_LOG_SRC_KEY_LEN);
+    msgpack_pack_str_body(&packer, PLATFORM_LOG_SRC_KEY, PLATFORM_LOG_SRC_KEY_LEN);
+    msgpack_pack_str(&packer, PLATFORM_LOG_ENVOY_KEY_LEN);
+    msgpack_pack_str_body(&packer, PLATFORM_LOG_ENVOY_KEY, PLATFORM_LOG_ENVOY_KEY_LEN);
+
+
+    int r = in_emitter_add_record(name->via.str.ptr, name->via.str.size, sbuf.data, sbuf.size, ctx->ins_emitter);
+    flb_plg_debug(ctx->ins, "(emit) re-emitting result %i", r);
+
+    msgpack_sbuffer_destroy(&sbuf);
+
+    return 0;
+}
+
 static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
-                               msgpack_object *root,
-                               struct platform_log_ctx *ctx)
+                                     msgpack_object *root,
+                                     struct platform_log_ctx *ctx)
 {
     int ret = 0;
 
@@ -635,7 +699,6 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
 
     const char *fqdn;
     size_t fqdn_size;
-    msgpack_object info;
 
     /* first pass - check if the records was re-emitted */
     for (i = 0; i < map.via.map.size; i++) {
@@ -654,12 +717,22 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
         if (key_cmp(key->via.str.ptr, key->via.str.size, ctx->key) == 0) {
             flb_plg_trace(ctx->ins, "(envoy) key found, initiating fqdn extraction");
 
-            if ( extract_fqdn(val, &fqdn, &fqdn_size, ctx) == 1 ) {
+            ret = extract_fqdn(val, &fqdn, &fqdn_size, ctx);
+            if ( ret == 1 ) {
                 flb_plg_trace(ctx->ins, "(envoy) found fqdn '%.*s'", (int)fqdn_size, fqdn);
 
-                if ( cache_get(ctx->cache, fqdn, fqdn_size, &info) == 1 ) {
+                const char *info_val;
+                int info_val_size;
+                ret = cache_get(ctx->cache, fqdn, fqdn_size, &info_val, &info_val_size);
+                if ( ret == 1 ) {
                     flb_plg_debug(ctx->ins, "(envoy) found splunk info for fqdn '%.*s'", (int)fqdn_size, fqdn);
-                    // TODO: ensure info.type == MAP
+
+                    msgpack_unpacked result;
+                    size_t off = 0;
+                    msgpack_unpacked_init(&result);
+                    msgpack_unpack_next(&result, info_val, info_val_size, &off);
+                    re_emit(ts, map, result.data, ctx);
+                    msgpack_unpacked_destroy(&result);
 
                     ret = 1;
                 } else {
@@ -674,64 +747,6 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
         }
     }
 
-    // NEW WAY - re-emit
-    if ( ret == 1 ) {
-        flb_plg_debug(ctx->ins, "(envoy) found useful record, re-emitting");
-
-        /* info is a map: {index=>"idx", name=>"server"} */
-        /* add the index, use the name as a tag to re-emit the record */
-        msgpack_object *index, *name;
-        index = helper_msgpack_map_get("index", &info.via.map);
-        name = helper_msgpack_map_get("name", &info.via.map);
-
-        if (!(index && name)) {
-            flb_plg_debug(ctx->ins, "(envoy) no splunk info, ignoring...");
-            return 0;
-        }
-
-        msgpack_sbuffer sbuf;
-        msgpack_packer packer;
-        // char *out_tag = "lrtag"; // should be the index!
-
-        msgpack_sbuffer_init(&sbuf);
-        msgpack_packer_init(&packer, &sbuf, msgpack_sbuffer_write);
-
-        /* repack with the additional info */
-        msgpack_pack_array(&packer, 2);
-        msgpack_pack_object(&packer, ts);
-
-        /* existing map + index map (from info map) + src map */
-        msgpack_pack_map(&packer, map.via.map.size + 2);
-
-        /* existing map */
-        for (i = 0; i < map.via.map.size; i++) {
-            msgpack_pack_object(&packer, (kv+i)->key);
-            msgpack_pack_object(&packer, (kv+i)->val);
-        }
-
-        /* info map */
-        msgpack_pack_str(&packer, PLATFORM_LOG_INDEX_KEY_LEN);
-        msgpack_pack_str_body(&packer, PLATFORM_LOG_INDEX_KEY, PLATFORM_LOG_INDEX_KEY_LEN);
-        msgpack_pack_str(&packer, index->via.str.size);
-        msgpack_pack_str_body(&packer, index->via.str.ptr, index->via.str.size);
-
-
-        /* src map */
-        // TODO: cache this in ctx?
-        msgpack_pack_str(&packer, PLATFORM_LOG_SRC_KEY_LEN);
-        msgpack_pack_str_body(&packer, PLATFORM_LOG_SRC_KEY, PLATFORM_LOG_SRC_KEY_LEN);
-        msgpack_pack_str(&packer, PLATFORM_LOG_ENVOY_KEY_LEN);
-        msgpack_pack_str_body(&packer, PLATFORM_LOG_ENVOY_KEY, PLATFORM_LOG_ENVOY_KEY_LEN);
-
-
-        int r = in_emitter_add_record(name->via.str.ptr, name->via.str.size, sbuf.data, sbuf.size, ctx->ins_emitter);
-        flb_plg_debug(ctx->ins, "(envoy) re-emitting result %i", r);
-
-        msgpack_sbuffer_destroy(&sbuf);
-    }
-
-    // fprintf(stderr, "---\n");
-    // return ret;
     // no changes for now: we could have configurable option to drop the message.
     return 0;
 }

@@ -58,20 +58,18 @@ int cache_del(struct cache *cache, const char *key)
     return FLB_TRUE;
 }
 
-int cache_get(struct cache *cache, const char *key, int key_len, msgpack_object *value)
+/* let the client unpack so we don't have to deep-copy the msgpack_object */
+int cache_get(struct cache *cache, const char *key, int key_len,
+                                   const char **val, int *val_len)
 {
     int ret;
-    const char *val;
-    size_t val_s;
+    const char *tmp_val;
+    size_t tmp_size;
 
-    ret = flb_hash_get(cache->_hash, key, key_len, &val, &val_s);
+    ret = flb_hash_get(cache->_hash, key, key_len, &tmp_val, &tmp_size);
     if (ret != -1) {
-        msgpack_unpacked result;
-        size_t off = 0;
-        msgpack_unpacked_init(&result);
-        msgpack_unpack_next(&result, val, val_s, &off);
-        *value = result.data;
-        msgpack_unpacked_destroy(&result);
+        *val = tmp_val;
+        *val_len = tmp_size;
         return 1;
     }
     return -1;
