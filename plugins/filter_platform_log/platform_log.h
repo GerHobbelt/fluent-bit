@@ -8,6 +8,8 @@
 
 #include <time.h>
 
+#define PLATFORM_LOG_LOG_KEY           "log"
+#define PLATFORM_LOG_LOG_KEY_LEN       3
 #define PLATFORM_LOG_FQDN_KEY          "authority"
 #define PLATFORM_LOG_FQDN_KEY_LEN      9
 #define PLATFORM_LOG_ENVOY_KEY         "envoy"

@@ -424,7 +424,8 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     struct flb_kv *kv;
 
     char *type_envoy = PLATFORM_LOG_ENVOY_KEY;
-    char *default_key = "log";
+    char *default_key = PLATFORM_LOG_LOG_KEY;
+    int default_key_len = PLATFORM_LOG_LOG_KEY_LEN;
 
     ctx->key = NULL;
     ctx->key_len = 0;
@@ -457,7 +458,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     // Set default
     if (ctx->key_len == 0) {
         ctx->key = flb_strdup(default_key);
-        ctx->key_len = flb_sds_len(default_key);
+        ctx->key_len = default_key_len;
     }
 
     // initialize cache
