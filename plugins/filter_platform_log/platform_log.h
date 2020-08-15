@@ -29,6 +29,9 @@
 #define PLATFORM_CACHE_SIZE_MAX        20
 #define PLATFORM_CACHE_TTL_SECS        20 //240 /* should be less than 5min */
 
+#define PLATFORM_LOG_METRIC_EMITTED    299
+#define PLATFORM_LOG_MEM_BUF_LIMIT     "10M"
+
 enum FILTER_PLATFORM_LOG_SOURCE_TYPE {
   ENVOY
 };

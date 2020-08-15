@@ -7,6 +7,7 @@
 /* re-emitter stuff */
 #include <fluent-bit/flb_input.h>
 #include <fluent-bit/flb_storage.h>
+#include <fluent-bit/flb_utils.h>
 
 #include <msgpack.h>
 #include <jsmn/jsmn.h>
@@ -448,6 +449,11 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
         ctx->type = ENVOY;
     }
 
+    /* re-emitter config; hard-coded for now */
+    ctx->emitter_name = flb_strdup("emitter_for_platform_log");
+    ctx->emitter_storage_type = flb_strdup("filesystem");        /* could be memory */
+    ctx->emitter_mem_buf_limit = flb_utils_size_to_bytes(PLATFORM_LOG_MEM_BUF_LIMIT);
+
     // initialize cache
     ctx->cache = cache_create(ctx->ins, PLATFORM_CACHE_SIZE, PLATFORM_CACHE_SIZE_MAX);
     if (ctx->cache == NULL) {
@@ -479,12 +485,10 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     int ret;
     int coll_fd;
     struct flb_input_instance *ins;
-    const char *emitter_name = "envoy_re_emiter";
-    const char *emitter_storage_type = "filesystem";
 
-    ret = flb_input_name_exists(emitter_name, config);
+    ret = flb_input_name_exists(ctx->emitter_name, config);
     if (ret == FLB_TRUE) {
-        flb_plg_error(ctx->ins, "emitter_name '%s' already exists", emitter_name);
+        flb_plg_error(ctx->ins, "emitter_name '%s' already exists", ctx->emitter_name);
         return -1;
     }
 
@@ -495,8 +499,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     }
 
     /* Set the alias name */
-    // ret = flb_input_set_property(ins, "alias", ctx->emitter_name);
-    ret = flb_input_set_property(ins, "alias", emitter_name);
+    ret = flb_input_set_property(ins, "alias", ctx->emitter_name);
     if (ret == -1) {
         flb_plg_warn(ctx->ins,
                      "cannot set emitter_name, using fallback name '%s'",
@@ -504,12 +507,12 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     }
 
     /* Set the emitter_mem_buf_limit */
-    // if(ctx->emitter_mem_buf_limit > 0) {
-    //     ins->mem_buf_limit = ctx->emitter_mem_buf_limit;
-    // }
+    if(ctx->emitter_mem_buf_limit > 0) {
+        ins->mem_buf_limit = ctx->emitter_mem_buf_limit;
+    }
 
     /* Set the storage type */
-    ret = flb_input_set_property(ins, "storage.type", emitter_storage_type);
+    ret = flb_input_set_property(ins, "storage.type", ctx->emitter_storage_type);
     if (ret == -1) {
         flb_plg_error(ctx->ins, "cannot set storage.type");
     }
@@ -558,10 +561,12 @@ static void teardown(struct platform_log_ctx *ctx)
     flb_input_instance_exit(ctx->ins_emitter, ctx->config);
     flb_input_instance_destroy(ctx->ins_emitter);
 
-    flb_free(ctx->rv);
     k8s_destroy(ctx->k8s);
-    flb_free(ctx->key);
     cache_destroy(ctx->cache);
+    flb_free(ctx->emitter_storage_type);
+    flb_free(ctx->emitter_name);
+    flb_free(ctx->rv);
+    flb_free(ctx->key);
     flb_plg_info(ctx->ins, "stopped");
 }
 
@@ -760,6 +765,11 @@ static int cb_pl_init(struct flb_filter_instance *f_ins,
         return -1;
     }
 
+    /* Register a metric to count the number of emitted records */
+#ifdef FLB_HAVE_METRICS
+    flb_metrics_add(PLATFORM_LOG_METRIC_EMITTED, "emit_records", ctx->ins->metrics);
+#endif
+
     flb_filter_set_context(f_ins, ctx);
     return 0;
 }
@@ -862,6 +872,14 @@ static int cb_pl_filter(const void *data, size_t bytes,
 
     }
     msgpack_unpacked_destroy(&result);
+
+/* TODO: count nb re-emitted
+#ifdef FLB_HAVE_METRICS
+    if (emitted > 0) {
+        flb_metrics_sum(PLATFORM_LOG_METRIC_EMITTED, emitted, ctx->ins->metrics);
+    }
+#endif
+*/
 
     /* link new buffers */
     *out_buf   = buffer.data;
