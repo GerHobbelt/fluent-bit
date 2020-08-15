@@ -4,7 +4,7 @@
 #include <fluent-bit/flb_upstream.h>
 
 #define PLATFORM_LOG_K8S_API_HOST      "kubernetes.default.svc"
-#define PLATFORM_LOG_K8S_API_PORT      443
+#define PLATFORM_LOG_K8S_API_PORT      "443"
 #define PLATFORM_LOG_K8S_CA_FILE       "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 #define PLATFORM_LOG_K8S_TOKEN_FILE    "/var/run/secrets/kubernetes.io/serviceaccount/token"
 

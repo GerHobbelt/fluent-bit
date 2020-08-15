@@ -38,7 +38,6 @@ struct platform_log_ctx {
 
     /* log key to match on */
     char *key;
-    int key_len;
 
     /* cache */
     struct cache *cache;

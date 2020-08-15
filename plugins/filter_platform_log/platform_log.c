@@ -420,45 +420,32 @@ void cache_create_dummy_data(struct platform_log_ctx *ctx)
 */
 static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 {
-    struct mk_list *head;
-    struct flb_kv *kv;
-
+    const char *tmp;
     char *type_envoy = PLATFORM_LOG_ENVOY_KEY;
-    char *default_key = PLATFORM_LOG_LOG_KEY;
-    int default_key_len = PLATFORM_LOG_LOG_KEY_LEN;
 
     ctx->key = NULL;
-    ctx->key_len = 0;
-
     ctx->rv = NULL;
 
-    /* Iterate all filter properties */
-    // TODO: change this to use flb_filter_get_property
-    mk_list_foreach(head, &ctx->ins->properties) {
-      kv = mk_list_entry(head, struct flb_kv, _head);
-
-      if (strcasecmp(kv->key, "type") == 0) {
-          if (strcmp(kv->val, type_envoy) == 0) {
-              ctx->type = ENVOY;
-          } else {
-              flb_plg_error(ctx->ins, "Configuration \"Type\" has invalid value "
-                            "'%s'. Only 'envoy' is supported\n",
-                            kv->val);
-            return -1;
-          }
-      } else if (strcasecmp(kv->key, "key") == 0) {
-          ctx->key = flb_strdup(kv->val);
-          ctx->key_len = flb_sds_len(kv->val);
-      // } else {
-      //     flb_plg_error(ctx->ins, "Invalid configuration key '%s'", kv->key);
-          // return -1;
-      }
+    /* Process filter properties */
+    tmp = flb_filter_get_property("key", ctx->ins);
+    if (tmp) {
+        ctx->key = flb_strdup(tmp);
+    } else {
+        ctx->key = flb_strdup(PLATFORM_LOG_LOG_KEY);
     }
 
-    // Set default
-    if (ctx->key_len == 0) {
-        ctx->key = flb_strdup(default_key);
-        ctx->key_len = default_key_len;
+    tmp = flb_filter_get_property("type", ctx->ins);
+    if (tmp) {
+        if (strcmp(tmp, PLATFORM_LOG_ENVOY_KEY) == 0) {
+            ctx->type = ENVOY;
+        } else {
+            flb_plg_error(ctx->ins, "Configuration \"Type\" has invalid value "
+                          "'%s'. Only 'envoy' is supported\n",
+                          tmp);
+          return -1;
+        }
+    } else {
+        ctx->type = ENVOY;
     }
 
     // initialize cache
@@ -898,7 +885,58 @@ static int cb_pl_exit(void *data, struct flb_config *config)
 }
 
 /* Configuration properties map */
-// static struct flb_config_map config_map[] = {}
+/* only write context to k8s_conf! */
+static struct flb_config_map config_map[] = {
+    /* platform_log */
+    {
+     FLB_CONFIG_MAP_STR, "type", NULL,
+     0, FLB_FALSE, 0,
+     "Platform Log source type; only envoy is supported at the moment"
+    },
+
+    {
+     FLB_CONFIG_MAP_STR, "key", NULL,
+     0, FLB_FALSE, 0,
+     "Input log key where the payload is located"
+    },
+
+    /* k8s */
+    {
+     FLB_CONFIG_MAP_STR, "k8s_host", PLATFORM_LOG_K8S_API_HOST,
+     0, FLB_TRUE, offsetof(struct k8s_conf, api_host),
+     "Kubernetes API server host"
+    },
+    {
+     FLB_CONFIG_MAP_INT, "k8s_port", PLATFORM_LOG_K8S_API_PORT,
+     0, FLB_TRUE, offsetof(struct k8s_conf, api_port),
+     "Kubernetes API server port"
+    },
+    {
+     FLB_CONFIG_MAP_BOOL, "k8s_use_tls", "true",
+     0, FLB_TRUE, offsetof(struct k8s_conf, use_tls),
+     "Kubernetes API server uses TLS"
+    },
+    {
+     FLB_CONFIG_MAP_STR, "k8s_ca_file", PLATFORM_LOG_K8S_CA_FILE,
+     0, FLB_TRUE, offsetof(struct k8s_conf, tls_ca_file),
+     "Kubernetes TLS CA file"
+    },
+    /*
+    {
+     FLB_CONFIG_MAP_STR, "k8s_ca_path", NULL,
+     0, FLB_TRUE, offsetof(struct k8s_conf, tls_ca_path),
+     "Kubernetes TLS ca path"
+    },
+    */
+    {
+     FLB_CONFIG_MAP_STR, "k8s_token_file", PLATFORM_LOG_K8S_TOKEN_FILE,
+     0, FLB_TRUE, offsetof(struct k8s_conf, token_file),
+     "Kubernetes authorization token file"
+    },
+
+    /* EOF */
+    {0}
+};
 
 struct flb_filter_plugin filter_platform_log_plugin = {
     .name        = "platform_log",
@@ -906,5 +944,6 @@ struct flb_filter_plugin filter_platform_log_plugin = {
     .cb_init     = cb_pl_init,
     .cb_filter   = cb_pl_filter,
     .cb_exit     = cb_pl_exit,
+    .config_map  = config_map,
     .flags       = 0
 };

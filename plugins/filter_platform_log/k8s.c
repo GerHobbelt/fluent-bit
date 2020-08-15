@@ -51,7 +51,6 @@ static int file_to_buffer(const char *path,
 struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *config)
 {
     int ret;
-    const char *tmp;
     struct k8s_conf *k8s;
 
     k8s = flb_calloc(1, sizeof(struct k8s_conf));
@@ -59,41 +58,10 @@ struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *
         return NULL;
     }
 
-    /* process parameters */
-    tmp = flb_filter_get_property("K8s_Host", ins);
-    if (tmp) {
-        k8s->api_host = flb_strdup(tmp);
-    } else {
-        k8s->api_host = flb_strdup(PLATFORM_LOG_K8S_API_HOST);
-    }
-
-    tmp = flb_filter_get_property("K8s_Port", ins);
-    if (tmp && (ret = atoi(tmp)) > 1) {
-        k8s->api_port = atoi(tmp);
-    } else {
-        k8s->api_port = PLATFORM_LOG_K8S_API_PORT;
-    }
-
-    k8s->use_tls = FLB_TRUE;
-    tmp = flb_filter_get_property("K8s_Use_TLS", ins);
-    if (tmp) {
-        if (strcasecmp(tmp, "false") == 0 || strcasecmp(tmp, "no") == 0) {
-            k8s->use_tls = FLB_FALSE;
-        }
-    }
-
-    tmp = flb_filter_get_property("K8s_CA_File", ins);
-    if (tmp) {
-        k8s->tls_ca_file = flb_strdup(tmp);
-    } else {
-        k8s->tls_ca_file = flb_strdup(PLATFORM_LOG_K8S_CA_FILE);
-    }
-
-    tmp = flb_filter_get_property("K8s_Token_File", ins);
-    if (tmp) {
-        k8s->token_file = flb_strdup(tmp);
-    } else {
-        k8s->token_file = flb_strdup(PLATFORM_LOG_K8S_TOKEN_FILE);
+    ret = flb_filter_config_map_set(ins, (void *) k8s);
+    if ( ret == -1) {
+        flb_plg_error(ins, "unable to set config map");
+        return NULL;
     }
 
     flb_plg_debug(ins, "k8s_api=%s:%i (use_tls=%i)", k8s->api_host, k8s->api_port, k8s->use_tls);
@@ -161,15 +129,6 @@ void k8s_destroy(struct k8s_conf *k8s)
     }
     if (k8s->auth) {
         flb_free(k8s->auth);
-    }
-    if (k8s->token_file) {
-        flb_free(k8s->token_file);
-    }
-    if (k8s->tls_ca_file) {
-        flb_free(k8s->tls_ca_file);
-    }
-    if (k8s->api_host) {
-        flb_free(k8s->api_host);
     }
     flb_free(k8s);
 }
