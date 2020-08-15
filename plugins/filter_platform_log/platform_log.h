@@ -54,12 +54,14 @@ struct platform_log_ctx {
     /* Filter plugin instance reference */
     struct flb_filter_instance *ins;
 
-    // test
-    struct flb_input_instance *ins_emitter;
+    /* emitter setup */
+    struct flb_input_instance *ins_emitter; /* emitter input plugin instance */
     flb_sds_t emitter_name;                 /* emitter input plugin name */
     flb_sds_t emitter_storage_type;         /* emitter storage type */
-    size_t emitter_mem_buf_limit;           /* Emitter buffer limit */
-    struct flb_config *config;              /* Fluent Bit context */
+    size_t emitter_mem_buf_limit;           /* emitter buffer limit */
+
+    /* Fluent Bit context */
+    struct flb_config *config;
 };
 
 /* Register external function to emit records, check 'plugins/in_emitter' */

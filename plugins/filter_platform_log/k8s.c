@@ -93,7 +93,7 @@ struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *
     if (tmp) {
         k8s->token_file = flb_strdup(tmp);
     } else {
-        k8s->token_file = flb_strdup(PLATFORM_LOG_K8S_TOKEN);
+        k8s->token_file = flb_strdup(PLATFORM_LOG_K8S_TOKEN_FILE);
     }
 
     flb_plg_debug(ins, "k8s_api=%s:%i (use_tls=%i)", k8s->api_host, k8s->api_port, k8s->use_tls);

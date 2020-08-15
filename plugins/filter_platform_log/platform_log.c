@@ -485,7 +485,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     // TODO: parameterize
     ctx->ttl = PLATFORM_CACHE_TTL_SECS;
 
-    flb_plg_info(ctx->ins, "type=%s key=%s cache=%i", type_envoy, default_key, cache_size(ctx->cache));
+    flb_plg_info(ctx->ins, "type=%s key=%s cache=%i", type_envoy, ctx->key, cache_size(ctx->cache));
 
     // re-emitter stuff
     // from rewrite_tag.c
@@ -901,10 +901,10 @@ static int cb_pl_exit(void *data, struct flb_config *config)
 // static struct flb_config_map config_map[] = {}
 
 struct flb_filter_plugin filter_platform_log_plugin = {
-    .name         = "platform_log",
-    .description  = "Adobe Platform Log Filter",
-    .cb_init      = cb_pl_init,
-    .cb_filter    = cb_pl_filter,
-    .cb_exit      = cb_pl_exit,
-    .flags        = 0
+    .name        = "platform_log",
+    .description = "Adobe Platform Log Filter",
+    .cb_init     = cb_pl_init,
+    .cb_filter   = cb_pl_filter,
+    .cb_exit     = cb_pl_exit,
+    .flags       = 0
 };
