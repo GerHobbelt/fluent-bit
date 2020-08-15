@@ -804,6 +804,7 @@ static int cb_pl_filter(const void *data, size_t bytes,
 
     // no mappings, no touch.
     if (cache_s == 0) {
+        flb_plg_debug(ctx->ins, "*** PLATFORM LOG FILTER :: END / NO MODIF (nada) ***");
         return FLB_FILTER_NOTOUCH;
     }
 
