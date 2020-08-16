@@ -422,23 +422,16 @@ void cache_create_dummy_data(struct platform_log_ctx *ctx)
 static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 {
     const char *tmp;
-    char *type_envoy = PLATFORM_LOG_ENVOY_KEY;
+    char *source_envoy = PLATFORM_LOG_ENVOY_KEY;
 
-    ctx->key = NULL;
-    ctx->rv = NULL;
-
-    /* Process filter properties */
-    tmp = flb_filter_get_property("key", ctx->ins);
-    if (tmp) {
-        ctx->key = flb_strdup(tmp);
-    } else {
-        ctx->key = flb_strdup(PLATFORM_LOG_LOG_KEY);
-    }
-
+    /*
+        Process filter properties
+    */
+    /* source */
     tmp = flb_filter_get_property("type", ctx->ins);
     if (tmp) {
         if (strcmp(tmp, PLATFORM_LOG_ENVOY_KEY) == 0) {
-            ctx->type = ENVOY;
+            ctx->source = ENVOY;
         } else {
             flb_plg_error(ctx->ins, "Configuration \"Type\" has invalid value "
                           "'%s'. Only 'envoy' is supported\n",
@@ -446,7 +439,18 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
           return -1;
         }
     } else {
-        ctx->type = ENVOY;
+        ctx->source = ENVOY;
+    }
+
+    /* filter */
+    ctx->filter = FILTER_LOG_5XX;
+
+    /* log key */
+    tmp = flb_filter_get_property("key", ctx->ins);
+    if (tmp) {
+        ctx->key = flb_strdup(tmp);
+    } else {
+        ctx->key = flb_strdup(PLATFORM_LOG_LOG_KEY);
     }
 
     /* re-emitter config; hard-coded for now */
@@ -454,7 +458,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     ctx->emitter_storage_type = flb_strdup("filesystem");        /* could be memory */
     ctx->emitter_mem_buf_limit = flb_utils_size_to_bytes(PLATFORM_LOG_MEM_BUF_LIMIT);
 
-    // initialize cache
+    /* initialize cache */
     ctx->cache = cache_create(ctx->ins, PLATFORM_CACHE_SIZE, PLATFORM_CACHE_SIZE_MAX);
     if (ctx->cache == NULL) {
         flb_errno();
@@ -463,13 +467,16 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     flb_plg_debug(ctx->ins, "cache configured...");
     // cache_create_dummy_data(ctx);
 
-    // initialize k8s
+    /* initialize k8s */
     ctx->k8s = k8s_create(ctx->ins, config);
     if (ctx->k8s == NULL) {
         flb_errno();
         return -1;
     }
     flb_plg_debug(ctx->ins, "k8s configured...");
+
+    /* no resource-version */
+    ctx->rv = NULL;
 
     // k8s_test(ctx->k8s, config); // TODO: test success.....
     load_data(ctx);
@@ -478,10 +485,9 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     // TODO: parameterize
     ctx->ttl = PLATFORM_CACHE_TTL_SECS;
 
-    flb_plg_info(ctx->ins, "type=%s key=%s cache=%i", type_envoy, ctx->key, cache_size(ctx->cache));
+    flb_plg_info(ctx->ins, "source=%s key=%s cache=%i", source_envoy, ctx->key, cache_size(ctx->cache));
 
-    // re-emitter stuff
-    // from rewrite_tag.c
+    /* re-emitter (from rewrite_tag.c) */
     int ret;
     int coll_fd;
     struct flb_input_instance *ins;
@@ -723,6 +729,7 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
                     size_t off = 0;
                     msgpack_unpacked_init(&result);
                     msgpack_unpack_next(&result, info_val, info_val_size, &off);
+                    // TODO: check filter type
                     re_emit(ts, map, result.data, ctx);
                     msgpack_unpacked_destroy(&result);
 
@@ -740,6 +747,8 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
     }
 
     // no changes for now: we could have configurable option to drop the message.
+    // TODO: check filter type
+    // ctx->filter
     return 0;
 }
 
@@ -860,7 +869,7 @@ static int cb_pl_filter(const void *data, size_t bytes,
             continue;
         }
 
-        if (ctx->type == ENVOY) {
+        if (ctx->source == ENVOY) {
             modified_records = apply_envoy_filter(/*&packer, */&result.data, ctx);
         }
 

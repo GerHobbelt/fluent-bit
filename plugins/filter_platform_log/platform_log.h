@@ -32,12 +32,20 @@
 #define PLATFORM_LOG_METRIC_EMITTED    299
 #define PLATFORM_LOG_MEM_BUF_LIMIT     "10M"
 
-enum FILTER_PLATFORM_LOG_SOURCE_TYPE {
-  ENVOY
+enum source_type {
+    ENVOY
+};
+
+enum filter_type {
+    FILTER_LOG_ALL, /* log everything */
+    FILTER_LOG_5XX, /* log server errors only */
+    FILTER_LOG_ERR, /* log server and client errors */
+    FILTER_LOG_NOT, /* log nothing */
 };
 
 struct platform_log_ctx {
-    enum FILTER_PLATFORM_LOG_SOURCE_TYPE type;
+    enum source_type source;
+    enum filter_type filter;
 
     /* log key to match on */
     char *key;
