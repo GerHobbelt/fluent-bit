@@ -12,12 +12,14 @@
 #define PLATFORM_LOG_LOG_KEY_LEN       3
 #define PLATFORM_LOG_FQDN_KEY          "authority"
 #define PLATFORM_LOG_FQDN_KEY_LEN      9
+#define PLATFORM_LOG_HTTP_CODE_KEY     "response_code"
+#define PLATFORM_LOG_HTTP_CODE_KEY_LEN 13
 #define PLATFORM_LOG_ENVOY_KEY         "envoy"
 #define PLATFORM_LOG_ENVOY_KEY_LEN     5
 
 /* source or sourcetype: need standard! */
 #define PLATFORM_LOG_SRC_KEY           "source"
-#define PLATFORM_LOG_SRC_KEY_LEN        6
+#define PLATFORM_LOG_SRC_KEY_LEN       6
 
 /* TODO: retire this if not needed */
 #define PLATFORM_LOG_INDEX_KEY         "index"
@@ -29,8 +31,14 @@
 #define PLATFORM_CACHE_SIZE_MAX        20
 #define PLATFORM_CACHE_TTL_SECS        20 //240 /* should be less than 5min */
 
-#define PLATFORM_LOG_METRIC_EMITTED    299
+#define PLATFORM_LOG_METRIC_EMITTED    298
+#define PLATFORM_LOG_METRIC_DELETED    299
 #define PLATFORM_LOG_MEM_BUF_LIMIT     "10M"
+
+#define PLATFORM_LOG_FILTER_LOG_ALL    "all"
+#define PLATFORM_LOG_FILTER_LOG_ERR    "err"
+#define PLATFORM_LOG_FILTER_LOG_5XX    "5xx"
+#define PLATFORM_LOG_FILTER_LOG_NOT    "none"
 
 enum source_type {
     ENVOY
@@ -38,8 +46,8 @@ enum source_type {
 
 enum filter_type {
     FILTER_LOG_ALL, /* log everything */
-    FILTER_LOG_5XX, /* log server errors only */
     FILTER_LOG_ERR, /* log server and client errors */
+    FILTER_LOG_5XX, /* log server errors only */
     FILTER_LOG_NOT, /* log nothing */
 };
 
