@@ -38,17 +38,20 @@ void cache_destroy(struct cache *cache)
 
 int cache_add(struct cache *cache, const char *key, int key_len, msgpack_object *value)
 {
+    int ret;
     msgpack_sbuffer sbuf;
     msgpack_packer pk;
     msgpack_sbuffer_init(&sbuf);
     msgpack_packer_init(&pk, &sbuf, msgpack_sbuffer_write);
 
     msgpack_pack_object(&pk, *value);
-    /*int r = */flb_hash_add(cache->_hash, key, key_len, sbuf.data, sbuf.size);
-    // flb_plg_debug(cache->ins, "(cache_add) flb_hash_add %.*s: %i", key_len, key, r);
-    // TODO: test result here
-
+    ret = flb_hash_add(cache->_hash, key, key_len, sbuf.data, sbuf.size);
     msgpack_sbuffer_destroy(&sbuf);
+
+    if (ret == -1) {
+        flb_plg_error(cache->ins, "(cache_add) error adding %.*s to cache", key_len, key);
+        return FLB_FALSE;
+    }
     return FLB_TRUE;
 }
 
@@ -70,9 +73,9 @@ int cache_get(struct cache *cache, const char *key, int key_len,
     if (ret != -1) {
         *val = tmp_val;
         *val_len = tmp_size;
-        return 1;
+        return FLB_TRUE;
     }
-    return -1;
+    return FLB_FALSE;
 }
 
 int cache_size(struct cache *cache)
@@ -91,7 +94,7 @@ int cache_clear(struct cache *cache)
         flb_plg_debug(cache->ins, "(clear) deleting %.*s", (int)entry->key_len, entry->key);
         cache_del(cache, entry->key);
     }
-    return 0;
+    return FLB_TRUE;
 }
 
 void cache_dump(struct cache *cache)

@@ -62,7 +62,6 @@ static inline const char *filter_type_str(enum filter_type ftype) {
     return types[ftype];
 }
 
-
 static inline int should_keep_log(enum filter_type ftype, int http_code)
 {
     int ret;
@@ -85,7 +84,7 @@ static inline int should_keep_log(enum filter_type ftype, int http_code)
 }
 
 msgpack_object *helper_msgpack_map_get(const char *key,
-                           msgpack_object_map *map)
+                                       msgpack_object_map *map)
 {
 
     msgpack_object_kv *kv = map->ptr;
@@ -183,14 +182,14 @@ int platform_log_get_inputs_envoy_fqdns(struct msgpack_object *in,
 
 /* envoy cache CRUD helpers */
 static int envoy_cache_add(struct platform_log_ctx *ctx,
-                    const char *fqdn, int fqdn_len, msgpack_object *splunk)
+                           const char *fqdn, int fqdn_len, msgpack_object *splunk)
 {
     flb_plg_debug(ctx->ins, "(cache) adding fqdn: %.*s", fqdn_len, fqdn);
     return cache_add(ctx->cache, fqdn, fqdn_len, splunk);
 }
 
 static int envoy_cache_delete(struct platform_log_ctx *ctx,
-                       const char *fqdn, int fqdn_len, msgpack_object *splunk)
+                              const char *fqdn, int fqdn_len, msgpack_object *splunk)
 {
     int ret;
     flb_sds_t s;
@@ -204,7 +203,7 @@ static int envoy_cache_delete(struct platform_log_ctx *ctx,
 }
 
 static int envoy_cache_update(struct platform_log_ctx *ctx,
-                       const char *fqdn, int fqdn_len, msgpack_object *splunk)
+                              const char *fqdn, int fqdn_len, msgpack_object *splunk)
 {
     flb_plg_error(ctx->ins, "envoy_cache_update not implemented");
     return FLB_TRUE;
@@ -240,8 +239,9 @@ static int set_resource_version(struct platform_log_ctx *ctx, msgpack_object *ob
 
 // Takes a msgpack-ed PlatformLog object and apply the given cache CRUD function to it
 static int platform_log_apply_fn(struct platform_log_ctx *ctx, msgpack_object *pl,
-                          int(*f) (struct platform_log_ctx *ctx,
-                                   const char *key, int key_len, msgpack_object *value))
+                                 int(*f) (struct platform_log_ctx *ctx,
+                                          const char *key, int key_len,
+                                          msgpack_object *value))
 {
     int ret = FLB_TRUE;
     msgpack_object inputs, output;
@@ -416,9 +416,9 @@ int load_delta(struct platform_log_ctx *ctx)
 
 // helper to add directly to cache
 static void cache_add_txt(struct cache *cache,
-                      const char *key, int key_len,
-                      const char *index, int index_len,
-                      const char *server, int server_len)
+                          const char *key, int key_len,
+                          const char *index, int index_len,
+                          const char *server, int server_len)
 {
     msgpack_sbuffer sbuf;
     msgpack_packer pk;
@@ -460,9 +460,9 @@ void cache_create_dummy_data(struct platform_log_ctx *ctx)
         char *server;
     };
     struct data entries[] = {
-        {"dummy1.sandbox.cloud.adobe.io", "dummy-index1", "dummy-server1"},
-        {"dummy2.sandbox.cloud.adobe.io", "dummy-index2", "dummy-server2"},
-        {"laurent-o.sandbox.cloud.adobe.io", "lr-dummy-index", "lr-dummy-server"},
+        {"dummy1.foo.io", "dummy-index1", "dummy-server1"},
+        {"dummy2.foo.io", "dummy-index2", "dummy-server2"},
+        {"laurent.foo.io", "lr-dummy-index", "lr-dummy-server"},
     };
     for (int i=0; i<sizeof(entries) / sizeof(struct data); i++) {
         cache_add_txt(ctx->cache,
@@ -665,12 +665,12 @@ static inline int envoy_extract_key(msgpack_object* log, const char *key,
     msgpack_object *ret;
     ret = helper_msgpack_map_get(key, &log->via.map);
     if (ret != NULL) {
-        flb_plg_debug(ctx->ins, "(extract) found '%.*s'", ret->via.str.size, ret->via.str.ptr);
+        flb_plg_debug(ctx->ins, "(extract) found %s=%.*s", key, ret->via.str.size, ret->via.str.ptr);
         *val = ret->via.str.ptr;
         *val_size = ret->via.str.size;
         return 1;
     } else {
-        flb_plg_debug(ctx->ins, "(extract) FQDN not found");
+        flb_plg_debug(ctx->ins, "(extract) key '%s' not found", key);
     }
     return 0;
 }
@@ -829,7 +829,7 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
                 const char *info_val;
                 int info_val_size;
                 ret = cache_get(ctx->cache, fqdn, fqdn_size, &info_val, &info_val_size);
-                if ( ret == 1 ) {
+                if ( ret == FLB_TRUE ) {
                     flb_plg_debug(ctx->ins, "(envoy) found splunk info for fqdn '%.*s'", (int)fqdn_size, fqdn);
 
                     msgpack_unpacked result;
@@ -845,10 +845,10 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
                     if (filter_obj != NULL) {
                         get_filter_type(filter_obj->via.str.ptr, filter_obj->via.str.size, &filter);
                     }
-                    flb_plg_debug(ctx->ins, "(envoy) user-provided filter %s", filter_type_str(filter));
+                    flb_plg_debug(ctx->ins, "(envoy) user-provided filter=%s", filter_type_str(filter));
 
                     ret = extract_http_code(val, &http_code, ctx);
-                    flb_plg_debug(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
+                    flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
 
                     if (should_keep_log(filter, http_code)) {
                         *emitted = re_emit(ts, map, result.data, ctx);
@@ -870,11 +870,11 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
             // TODO: could avoid httpcode extraction if filter is log_all or log_nothing
             if (http_code == -1) {
                 ret = extract_http_code(val, &http_code, ctx);
-                flb_plg_debug(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
+                flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
             }
             *keep = should_keep_log(ctx->filter, http_code);
 
-            flb_plg_debug(ctx->ins, "(envoy) outcome keep=%i, emitted=%i (true=%i, false=%i)", *keep, *emitted, FLB_TRUE, FLB_FALSE);
+            flb_plg_debug(ctx->ins, "(envoy) outcome keep=%i, emitted=%i", *keep, *emitted);
             break;
         }
     }

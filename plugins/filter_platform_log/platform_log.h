@@ -27,9 +27,9 @@
 #define PLATFORM_LOG_SERVER_KEY        "splunk-server"
 #define PLATFORM_LOG_SERVER_KEY_LEN    13
 
-#define PLATFORM_CACHE_SIZE            10
-#define PLATFORM_CACHE_SIZE_MAX        20
-#define PLATFORM_CACHE_TTL_SECS        20 //240 /* should be less than 5min */
+#define PLATFORM_CACHE_SIZE            100
+#define PLATFORM_CACHE_SIZE_MAX        500
+#define PLATFORM_CACHE_TTL_SECS        30 //240 /* should be less than 5min */
 
 #define PLATFORM_LOG_METRIC_EMITTED    298
 #define PLATFORM_LOG_METRIC_DELETED    299
@@ -69,14 +69,14 @@ struct platform_log_ctx {
     /* last resourceVersion */
     char *rv;
 
-    /* Filter plugin instance reference */
-    struct flb_filter_instance *ins;
-
     /* emitter setup */
     struct flb_input_instance *ins_emitter; /* emitter input plugin instance */
     flb_sds_t emitter_name;                 /* emitter input plugin name */
     flb_sds_t emitter_storage_type;         /* emitter storage type */
     size_t emitter_mem_buf_limit;           /* emitter buffer limit */
+
+    /* Filter plugin instance reference */
+    struct flb_filter_instance *ins;
 
     /* Fluent Bit context */
     struct flb_config *config;
