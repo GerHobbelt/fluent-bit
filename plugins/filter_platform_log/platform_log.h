@@ -36,7 +36,7 @@
 #define PLATFORM_LOG_MEM_BUF_LIMIT     "10M"
 
 #define PLATFORM_LOG_FILTER_LOG_ALL    "all"
-#define PLATFORM_LOG_FILTER_LOG_ERR    "err"
+#define PLATFORM_LOG_FILTER_LOG_ERR    "errors"
 #define PLATFORM_LOG_FILTER_LOG_5XX    "5xx"
 #define PLATFORM_LOG_FILTER_LOG_NOT    "none"
 

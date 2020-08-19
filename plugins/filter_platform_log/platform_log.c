@@ -27,6 +27,11 @@ static inline int key_cmp(const char *str, int len, const char *cmp)
     return strncasecmp(str, cmp, len);
 }
 
+static inline enum filter_type default_filter_type() {
+    /* default to server errors only */
+    return FILTER_LOG_5XX;
+}
+
 static inline int get_filter_type(const char *val, int len,
                                   enum filter_type *type)
 {
@@ -41,23 +46,43 @@ static inline int get_filter_type(const char *val, int len,
     } else if (key_cmp(val, len, PLATFORM_LOG_FILTER_LOG_NOT) == 0) {
         *type = FILTER_LOG_NOT;
     } else {
-        /* default to server errors only */
-        *type = FILTER_LOG_5XX;
+        *type = default_filter_type();
         ret = -1;
     }
     return ret;
 }
 
-static inline const char *filter_type_str(enum filter_type type) {
+static inline const char *filter_type_str(enum filter_type ftype) {
     const char *types[4] = {
         PLATFORM_LOG_FILTER_LOG_ALL,
         PLATFORM_LOG_FILTER_LOG_ERR,
         PLATFORM_LOG_FILTER_LOG_5XX,
         PLATFORM_LOG_FILTER_LOG_NOT,
     };
-    return types[type];
+    return types[ftype];
 }
 
+
+static inline int should_keep_log(enum filter_type ftype, int http_code)
+{
+    int ret;
+
+    ret = (ftype == FILTER_LOG_ALL && ftype != FILTER_LOG_NOT);
+    if ( ftype == FILTER_LOG_5XX || ftype == FILTER_LOG_ERR) {
+        if (http_code == 0) {
+            /* we don't know, so keep */
+            ret = FLB_TRUE;
+        } else {
+            if (ftype == FILTER_LOG_5XX && http_code>=500 && http_code <600) {
+                ret = FLB_TRUE;
+            }
+            if (ftype == FILTER_LOG_ERR && http_code>=400 && http_code <600) {
+                ret = FLB_TRUE;
+            }
+        }
+    }
+    return ret;
+}
 
 msgpack_object *helper_msgpack_map_get(const char *key,
                            msgpack_object_map *map)
@@ -481,22 +506,18 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
         ret = get_filter_type(tmp, strlen(tmp), &(ctx->filter));
         if (ret == -1) {
             flb_plg_error(ctx->ins, "Configuration \"envoy_filter\" has invalid value "
-                          "'%s'. Only 'all', 'err', '5xx' and 'none' are supported\n",
+                          "'%s'. Only 'all', 'errors', '5xx' and 'none' are supported\n",
                           tmp);
           return -1;
         }
     } else {
-        ctx->filter = FILTER_LOG_5XX;
+        ctx->filter = default_filter_type();
     }
     flb_plg_debug(ctx->ins, "filter %i", ctx->filter);
 
     /* log key */
     tmp = flb_filter_get_property("key", ctx->ins);
-    if (tmp) {
-        ctx->key = flb_strdup(tmp);
-    } else {
-        ctx->key = flb_strdup(PLATFORM_LOG_LOG_KEY);
-    }
+    ctx->key = tmp ? flb_strdup(tmp) : flb_strdup(PLATFORM_LOG_LOG_KEY);
 
     /* re-emitter config; hard-coded for now */
     ctx->emitter_name = flb_strdup("emitter_for_platform_log");
@@ -815,8 +836,24 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
                     size_t off = 0;
                     msgpack_unpacked_init(&result);
                     msgpack_unpack_next(&result, info_val, info_val_size, &off);
-                    // TODO: check filter type
-                    *emitted = re_emit(ts, map, result.data, ctx);
+
+                    /* user-provided http code filter */
+                    msgpack_object *filter_obj = NULL;
+                    enum filter_type filter = default_filter_type();
+
+                    filter_obj = helper_msgpack_map_get("envoyHTTPCodeFilter", &result.data.via.map);
+                    if (filter_obj != NULL) {
+                        get_filter_type(filter_obj->via.str.ptr, filter_obj->via.str.size, &filter);
+                    }
+                    flb_plg_debug(ctx->ins, "(envoy) user-provided filter %s", filter_type_str(filter));
+
+                    ret = extract_http_code(val, &http_code, ctx);
+                    flb_plg_debug(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
+
+                    if (should_keep_log(filter, http_code)) {
+                        *emitted = re_emit(ts, map, result.data, ctx);
+                    }
+
                     msgpack_unpacked_destroy(&result);
 
                     ret = 1;
@@ -829,28 +866,15 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
                 // trace?
             }
 
-            /* now, the http code */
-            *keep = ctx->filter == FILTER_LOG_ALL && ctx->filter != FILTER_LOG_NOT;
-            if (ctx->filter == FILTER_LOG_5XX || ctx->filter == FILTER_LOG_ERR) {
-                if (http_code == -1) {
-                    ret = extract_http_code(val, &http_code, ctx);
-                    flb_plg_debug(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
-                }
-                if (http_code == 0) {
-                    /* we don't know, so keep */
-                    *keep = FLB_TRUE;
-                    flb_plg_debug(ctx->ins, "(envoy) log errors but we don't know the status code, so keep");
-                } else {
-                    if (ctx->filter == FILTER_LOG_5XX && http_code>=500 && http_code <600) {
-                        *keep = FLB_TRUE;
-                    }
-                    if (ctx->filter == FILTER_LOG_ERR && http_code>=400 && http_code <600) {
-                        *keep = FLB_TRUE;
-                    }
-                }
-
+            /* now, the global http code filter */
+            // TODO: could avoid httpcode extraction if filter is log_all or log_nothing
+            if (http_code == -1) {
+                ret = extract_http_code(val, &http_code, ctx);
+                flb_plg_debug(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
             }
+            *keep = should_keep_log(ctx->filter, http_code);
 
+            flb_plg_debug(ctx->ins, "(envoy) outcome keep=%i, emitted=%i (true=%i, false=%i)", *keep, *emitted, FLB_TRUE, FLB_FALSE);
             break;
         }
     }
@@ -1040,7 +1064,7 @@ static struct flb_config_map config_map[] = {
     {
      FLB_CONFIG_MAP_STR, "envoy_filter", PLATFORM_LOG_FILTER_LOG_5XX,
      0, FLB_FALSE, 0,
-     "Http code filter (envoy): one of 'all', 'err', '5xx' or 'none'"
+     "Http code filter: one of 'all', 'errors', '5xx' or 'none'"
     },
     {
      FLB_CONFIG_MAP_STR, "key", PLATFORM_LOG_LOG_KEY, //NULL?
