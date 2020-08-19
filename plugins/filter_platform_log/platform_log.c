@@ -28,8 +28,8 @@ static inline int key_cmp(const char *str, int len, const char *cmp)
 }
 
 static inline enum filter_type default_filter_type() {
-    /* default to server errors only */
-    return FILTER_LOG_5XX;
+    /* default to everything for now */
+    return FILTER_LOG_ALL;
 }
 
 static inline int get_filter_type(const char *val, int len,
