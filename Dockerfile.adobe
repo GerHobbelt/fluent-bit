@@ -1,0 +1,11 @@
+FROM debian:stretch as builder
+COPY --from=amd64/busybox:1.31.1 /bin/busybox /bin/busybox
+RUN chmod 555 /bin/busybox \
+ && /bin/busybox --install -s /usr/local/bin
+
+FROM fluent/fluent-bit:latest
+COPY --from=builder /bin/busybox /bin/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
+
+ADD https://github.com/just-containers/s6-overlay/releases/download/v2.0.0.1/s6-overlay-amd64.tar.gz /tmp/
+RUN ["/usr/local/bin/sh", "-c", "/usr/local/bin/tar xzf /tmp/s6-overlay-amd64.tar.gz -C /"]
