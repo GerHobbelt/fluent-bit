@@ -16,6 +16,14 @@ A stands for Adobe's changes
 
 # Log
 
+## 1.5.3-0.2.0-adobe
+
+- caching / re-emitting fixes
+- use config map for configuration values
+- filter log by http code
+- run fluent-bit under proces supervision (s6)
+- various fixes and code cleanup
+
 ## 1.5.3-0.1.0-adobe
 
 - built from v1.5.3
