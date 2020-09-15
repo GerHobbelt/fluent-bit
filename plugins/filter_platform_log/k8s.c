@@ -169,7 +169,7 @@ int k8s_http_get(struct k8s_conf *k8s, const char *uri, char **out_buf, size_t *
         return -1;
     }
     flb_plg_debug(k8s->ins, "http_do=%i, HTTP Status=%i", ret, c->resp.status);
-    // fprintf(stderr, "%.*s", (int)c->resp.payload_size, c->resp.payload);
+    // flb_plg_debug(k8s->ins, "%.*s", (int)c->resp.payload_size, c->resp.payload);
 
     char *ret_buf;
     ret_buf = flb_malloc(c->resp.payload_size);

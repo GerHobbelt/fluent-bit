@@ -27,6 +27,24 @@ static inline int key_cmp(const char *str, int len, const char *cmp)
     return strncasecmp(str, cmp, len);
 }
 
+static inline const char *source_type_str(enum source_type stype) {
+    const char *types[3] = {
+        PLATFORM_LOG_ENVOY_KEY,
+        PLATFORM_LOG_EVENT_KEY,
+        PLATFORM_LOG_AUDIT_KEY,
+    };
+    return types[stype];
+}
+
+static inline int source_type_len(enum source_type stype) {
+    const int types[3] = {
+        PLATFORM_LOG_ENVOY_KEY_LEN,
+        PLATFORM_LOG_EVENT_KEY_LEN,
+        PLATFORM_LOG_AUDIT_KEY_LEN,
+    };
+    return types[stype];
+}
+
 static inline enum filter_type default_filter_type() {
     /* default to everything for now */
     return FILTER_LOG_ALL;
@@ -39,6 +57,8 @@ static inline int get_filter_type(const char *val, int len,
 
     if (key_cmp(val, len, PLATFORM_LOG_FILTER_LOG_ALL) == 0) {
         *type = FILTER_LOG_ALL;
+    } else if (key_cmp(val, len, PLATFORM_LOG_FILTER_LOG_UNS) == 0) {
+        *type = FILTER_LOG_UNS;
     } else if (key_cmp(val, len, PLATFORM_LOG_FILTER_LOG_5XX) == 0) {
         *type = FILTER_LOG_5XX;
     } else if (key_cmp(val, len, PLATFORM_LOG_FILTER_LOG_ERR) == 0) {
@@ -53,8 +73,9 @@ static inline int get_filter_type(const char *val, int len,
 }
 
 static inline const char *filter_type_str(enum filter_type ftype) {
-    const char *types[4] = {
+    const char *types[5] = {
         PLATFORM_LOG_FILTER_LOG_ALL,
+        PLATFORM_LOG_FILTER_LOG_UNS,
         PLATFORM_LOG_FILTER_LOG_ERR,
         PLATFORM_LOG_FILTER_LOG_5XX,
         PLATFORM_LOG_FILTER_LOG_NOT,
@@ -67,11 +88,14 @@ static inline int should_keep_log(enum filter_type ftype, int http_code)
     int ret;
 
     ret = (ftype == FILTER_LOG_ALL && ftype != FILTER_LOG_NOT);
-    if ( ftype == FILTER_LOG_5XX || ftype == FILTER_LOG_ERR) {
+    if ( ftype == FILTER_LOG_UNS || ftype == FILTER_LOG_5XX || ftype == FILTER_LOG_ERR) {
         if (http_code == 0) {
             /* we don't know, so keep */
             ret = FLB_TRUE;
         } else {
+            if (ftype == FILTER_LOG_UNS && (http_code<200 || http_code >=300)) {
+                ret = FLB_TRUE;
+            }
             if (ftype == FILTER_LOG_5XX && http_code>=500 && http_code <600) {
                 ret = FLB_TRUE;
             }
@@ -99,6 +123,32 @@ msgpack_object *helper_msgpack_map_get(const char *key,
         }
     }
     return NULL;
+}
+
+int platform_log_get_namespace(struct msgpack_object *pl,
+                               msgpack_object *ns)
+{
+    int found;
+
+    found = FLB_FALSE;
+
+    if (pl->type == MSGPACK_OBJECT_MAP) {
+        msgpack_object_kv *kv = pl->via.map.ptr;
+        msgpack_object *k, *v = NULL;
+        for (int i = 0; i < pl->via.map.size; i++) {
+            k = &(kv+i)->key;
+            v = &(kv+i)->val;
+            if (key_cmp(k->via.str.ptr, k->via.str.size, "metadata") == 0) {
+                return platform_log_get_namespace(v, ns);
+            }
+            if (key_cmp(k->via.str.ptr, k->via.str.size, "namespace") == 0) {
+                *ns = *v;
+                found = FLB_TRUE;
+                break;
+            }
+        }
+    }
+    return found;
 }
 
 int platform_log_get_inputs_output(struct msgpack_object *pl,
@@ -158,7 +208,7 @@ int platform_log_get_inputs_envoy_fqdns(struct msgpack_object *in,
     int ret = FLB_FALSE;
     if (in->type == MSGPACK_OBJECT_ARRAY) {
         for (int i=0; i<in->via.array.size; i++) {
-            return platform_log_get_inputs_envoy_fqdns(&(in->via.array.ptr[i]), fqdns);
+            ret |= platform_log_get_inputs_envoy_fqdns(&(in->via.array.ptr[i]), fqdns);
         }
     } else if (in->type == MSGPACK_OBJECT_MAP) {
         msgpack_object_kv *kv = in->via.map.ptr;
@@ -179,33 +229,55 @@ int platform_log_get_inputs_envoy_fqdns(struct msgpack_object *in,
     return ret;
 }
 
-
-/* envoy cache CRUD helpers */
-static int envoy_cache_add(struct platform_log_ctx *ctx,
-                           const char *fqdn, int fqdn_len, msgpack_object *splunk)
+int platform_log_get_inputs_src(struct msgpack_object *in,
+                                const char *src)
 {
-    flb_plg_debug(ctx->ins, "(cache) adding fqdn: %.*s", fqdn_len, fqdn);
-    return cache_add(ctx->cache, fqdn, fqdn_len, splunk);
+    int ret = FLB_FALSE;
+    if (in->type == MSGPACK_OBJECT_ARRAY) {
+        for (int i=0; i<in->via.array.size; i++) {
+            ret |= platform_log_get_inputs_src(&(in->via.array.ptr[i]), src);
+        }
+    } else if (in->type == MSGPACK_OBJECT_MAP) {
+        msgpack_object_kv *kv = in->via.map.ptr;
+        msgpack_object *k;
+        // msgpack_object *v;
+        for (int i=0; i<in->via.map.size; i++) {
+            k = &(kv+i)->key;
+            // v = &(kv+i)->val;
+            if (key_cmp(k->via.str.ptr, k->via.str.size, src) == 0) {
+                return FLB_TRUE;
+            }
+        };
+    }
+    return ret;
 }
 
-static int envoy_cache_delete(struct platform_log_ctx *ctx,
-                              const char *fqdn, int fqdn_len, msgpack_object *splunk)
+/* cache CRUD helpers */
+static int src_cache_add(struct platform_log_ctx *ctx,
+                         const char *key, int key_len, msgpack_object *splunk)
+{
+    flb_plg_debug(ctx->ins, "(cache) adding key=%.*s", key_len, key);
+    return cache_add(ctx->cache, key, key_len, splunk);
+}
+
+static int src_cache_delete(struct platform_log_ctx *ctx,
+                            const char *key, int key_len, msgpack_object *splunk)
 {
     int ret;
     flb_sds_t s;
 
-    flb_plg_debug(ctx->ins, "(cache) deleting fqdn: %.*s", fqdn_len, fqdn);
+    flb_plg_debug(ctx->ins, "(cache) deleting key=%.*s", key_len, key);
     // need to create a '\0'-terminated string here
-    s = flb_sds_create_len(fqdn, fqdn_len);
+    s = flb_sds_create_len(key, key_len);
     ret = cache_del(ctx->cache, s);
     flb_sds_destroy(s);
     return ret;
 }
 
-static int envoy_cache_update(struct platform_log_ctx *ctx,
-                              const char *fqdn, int fqdn_len, msgpack_object *splunk)
+static int src_cache_update(struct platform_log_ctx *ctx,
+                            const char *key, int key_len, msgpack_object *splunk)
 {
-    flb_plg_error(ctx->ins, "envoy_cache_update not implemented");
+    flb_plg_error(ctx->ins, "src_cache_update not implemented");
     return FLB_TRUE;
 }
 
@@ -248,8 +320,22 @@ static int platform_log_apply_fn(struct platform_log_ctx *ctx, msgpack_object *p
     int tmp;
 
     tmp = platform_log_get_inputs_output(pl, &inputs, &output);
+    if (tmp != FLB_TRUE) {
+        flb_plg_debug(ctx->ins, "(apply) platform_log_get_inputs_output returned nothing...");
+        // TODO: might need to print this for debugging
+        // msgpack_object_print(stderr, *pl);
+        // fprintf(stderr, "\n");
+        return FLB_FALSE;
+    }
 
-    if (tmp == FLB_TRUE) { //check for array type here?
+    //check for array type here?
+
+    /*
+        for envoy, the cache is keyed by fqdn;
+        for event and audit, the key is the namespace
+    */
+
+    if (ctx->source == ENVOY) {
         msgpack_object splunk;
         msgpack_object fqdns;
 
@@ -267,12 +353,22 @@ static int platform_log_apply_fn(struct platform_log_ctx *ctx, msgpack_object *p
                 }
             }
         }
+    } else if (ctx->source == EVENT || ctx->source == AUDIT) {
+        msgpack_object splunk;
+        msgpack_object ns;
+
+        int have_splunk = platform_log_get_output_splunk(&output, &splunk);
+        int have_src = platform_log_get_inputs_src(&inputs, source_type_str(ctx->source));
+        int have_ns = platform_log_get_namespace(pl, &ns);
+
+        if (have_splunk && have_src && have_ns) {
+            ret = (*f) (ctx, ns.via.str.ptr, ns.via.str.size, &splunk);
+        }
     } else {
-        flb_plg_debug(ctx->ins, "(apply) platform_log_get_inputs_output returned nothing...");
-        // TODO: might need to print this for debugging
-        // msgpack_object_print(stderr, *pl);
-        // fprintf(stderr, "\n");
+        flb_plg_error(ctx->ins, "platform_log_apply_fn not implemented for '%s'",
+                                source_type_str(ctx->source));
     }
+
     return ret;
 }
 
@@ -284,12 +380,15 @@ static int platform_log_apply_fn(struct platform_log_ctx *ctx, msgpack_object *p
 int load_data(struct platform_log_ctx *ctx)
 {
     int ret;
-    char *buf;
+    char *buf = NULL;
     size_t size;
 
     ret = k8s_pl_list(ctx->k8s, &buf, &size);
     flb_plg_debug(ctx->ins, "k8s_pl_list result %i", ret);
     if (ret != 200) {
+        if (buf != NULL) {
+            flb_free(buf);
+        }
         return -1;
     }
 
@@ -312,7 +411,7 @@ int load_data(struct platform_log_ctx *ctx)
         msgpack_object *elem;
         for (int j = 0; j < items->via.array.size; j++) {
             elem = &(items->via.array.ptr[j]);
-            platform_log_apply_fn(ctx, elem, &envoy_cache_add);
+            platform_log_apply_fn(ctx, elem, &src_cache_add);
         }
     }
 
@@ -379,11 +478,11 @@ int load_delta(struct platform_log_ctx *ctx)
 
                 if (key_cmp(k->via.str.ptr, k->via.str.size, "type") == 0) {
                    if (key_cmp(v->via.str.ptr, v->via.str.size, "ADDED") == 0) {
-                       f = &envoy_cache_add;
+                       f = &src_cache_add;
                    } else if (key_cmp(v->via.str.ptr, v->via.str.size, "DELETED") == 0) {
-                       f = &envoy_cache_delete;
+                       f = &src_cache_delete;
                    } else if (key_cmp(v->via.str.ptr, v->via.str.size, "MODIFIED") == 0) {
-                       f = &envoy_cache_update;
+                       f = &src_cache_update;
                    }
                    continue;
                 }
@@ -480,7 +579,6 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 {
     int ret;
     const char *tmp;
-    char *source_envoy = PLATFORM_LOG_ENVOY_KEY;
 
     /*
         Process filter properties
@@ -490,9 +588,13 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     if (tmp) {
         if (strcmp(tmp, PLATFORM_LOG_ENVOY_KEY) == 0) {
             ctx->source = ENVOY;
+        } else if (strcmp(tmp, PLATFORM_LOG_EVENT_KEY) == 0) {
+            ctx->source = EVENT;
+        } else if (strcmp(tmp, PLATFORM_LOG_AUDIT_KEY) == 0) {
+            ctx->source = AUDIT;
         } else {
             flb_plg_error(ctx->ins, "Configuration \"Type\" has invalid value "
-                          "'%s'. Only 'envoy' is supported\n",
+                          "'%s'. Only 'envoy', 'event' and 'audit' are supported\n",
                           tmp);
           return -1;
         }
@@ -554,7 +656,8 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 
     flb_plg_info(ctx->ins,
                  "source=%s filter=%s key=%s cache=%i",
-                 source_envoy, filter_type_str(ctx->filter), ctx->key, cache_size(ctx->cache));
+                 source_type_str(ctx->source), filter_type_str(ctx->filter),
+                 ctx->key, cache_size(ctx->cache));
 
     /* re-emitter (from rewrite_tag.c) */
     int coll_fd;
@@ -646,11 +749,11 @@ static void teardown(struct platform_log_ctx *ctx)
 
 
 /*
-    envoy log
+    extraction helpers
 */
-static inline int envoy_extract_key(msgpack_object* log, const char *key,
-                                    const char **val, size_t *val_size,
-                                    struct platform_log_ctx *ctx)
+static inline int log_extract_key(msgpack_object* log, const char *key,
+                                  const char **val, size_t *val_size,
+                                  struct platform_log_ctx *ctx)
 {
     /*
         only handle json-formatted Envoy logs, which msgpack would have already
@@ -679,7 +782,7 @@ static inline int extract_fqdn(msgpack_object *log,
                                const char **fqdn, size_t *fqdn_size,
                                struct platform_log_ctx *ctx)
 {
-    return envoy_extract_key(log, PLATFORM_LOG_FQDN_KEY, fqdn, fqdn_size, ctx);
+    return log_extract_key(log, PLATFORM_LOG_FQDN_KEY, fqdn, fqdn_size, ctx);
 }
 
 static inline int extract_http_code(msgpack_object *log,
@@ -690,12 +793,62 @@ static inline int extract_http_code(msgpack_object *log,
     const char *hcode;
     size_t hcode_size;
 
-    ret = envoy_extract_key(log, PLATFORM_LOG_HTTP_CODE_KEY, &hcode, &hcode_size, ctx);
+    ret = log_extract_key(log, PLATFORM_LOG_HTTP_CODE_KEY, &hcode, &hcode_size, ctx);
     if (ret == 1) {
         *http_code = atoi(hcode);
         return 1;
     }
     *http_code = 0;
+    return 0;
+}
+
+
+static inline int extract_ns_from_event_log(msgpack_object *log,
+                                            const char **ns, size_t *ns_size,
+                                            struct platform_log_ctx *ctx)
+{
+    if (log->type != MSGPACK_OBJECT_MAP) {
+        flb_plg_trace(ctx->ins, "(extract_ns_from_event_log) log not a map!");
+        return 0;
+    }
+
+    /* we're looking for event.metadata.namespace */
+    msgpack_object_kv *kv = log->via.map.ptr;
+    msgpack_object *k, *v = NULL;
+    for (int i = 0; i < log->via.map.size; i++) {
+        k = &(kv+i)->key;
+        v = &(kv+i)->val;
+        if (key_cmp(k->via.str.ptr, k->via.str.size, "event") == 0) {
+            return extract_ns_from_event_log(v, ns, ns_size, ctx);
+        }
+        if (key_cmp(k->via.str.ptr, k->via.str.size, "metadata") == 0) {
+            return log_extract_key(v, "namespace", ns, ns_size, ctx);
+        }
+
+    }
+    return 0;
+}
+
+static inline int extract_ns_from_audit_log(msgpack_object *log,
+                                            const char **ns, size_t *ns_size,
+                                            struct platform_log_ctx *ctx)
+{
+    if (log->type != MSGPACK_OBJECT_MAP) {
+        flb_plg_trace(ctx->ins, "(extract_ns_from_audit_log) log not a map!");
+        return 0;
+    }
+
+    /* we're looking for objectRef.namespace */
+    msgpack_object_kv *kv = log->via.map.ptr;
+    msgpack_object *k, *v = NULL;
+    for (int i = 0; i < log->via.map.size; i++) {
+        k = &(kv+i)->key;
+        v = &(kv+i)->val;
+        if (key_cmp(k->via.str.ptr, k->via.str.size, "objectRef") == 0) {
+            return log_extract_key(v, "namespace", ns, ns_size, ctx);
+        }
+
+    }
     return 0;
 }
 
@@ -708,7 +861,7 @@ static inline int re_emit(msgpack_object ts, msgpack_object map,
     int i;
     msgpack_object_kv *kv = map.via.map.ptr;
 
-    flb_plg_debug(ctx->ins, "(emit) found useful record, re-emitting (NEW)");
+    flb_plg_debug(ctx->ins, "(emit) found useful record, re-emitting");
 
     /* info is a map: {index=>"idx", name=>"server"} */
     /* add the index, use the name as a tag to re-emit the record */
@@ -752,8 +905,8 @@ static inline int re_emit(msgpack_object ts, msgpack_object map,
     // TODO: cache this in ctx?
     msgpack_pack_str(&packer, PLATFORM_LOG_SRC_KEY_LEN);
     msgpack_pack_str_body(&packer, PLATFORM_LOG_SRC_KEY, PLATFORM_LOG_SRC_KEY_LEN);
-    msgpack_pack_str(&packer, PLATFORM_LOG_ENVOY_KEY_LEN);
-    msgpack_pack_str_body(&packer, PLATFORM_LOG_ENVOY_KEY, PLATFORM_LOG_ENVOY_KEY_LEN);
+    msgpack_pack_str(&packer, source_type_len(ctx->source));
+    msgpack_pack_str_body(&packer, source_type_str(ctx->source), source_type_len(ctx->source));
 
 
     int r = in_emitter_add_record(name->via.str.ptr, name->via.str.size, sbuf.data, sbuf.size, ctx->ins_emitter);
@@ -764,7 +917,7 @@ static inline int re_emit(msgpack_object ts, msgpack_object map,
     return FLB_TRUE;
 }
 
-static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
+static inline int apply_filter(/*msgpack_packer *packer,*/
                                      msgpack_object *root,
                                      int *keep, int *emitted,
                                      struct platform_log_ctx *ctx)
@@ -786,7 +939,7 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
     msgpack_object map = root->via.array.ptr[1]; //flb_time_pop_from_msgpack(&tm, &result, &obj);
 
     if (map.type != MSGPACK_OBJECT_MAP) {
-        flb_plg_warn(ctx->ins, "(envoy) unexpected log format %u", map.type);
+        flb_plg_warn(ctx->ins, "(%s) unexpected log format %u", source_type_str(ctx->source), map.type);
         return 0;
     }
 
@@ -795,8 +948,27 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
     msgpack_object *key;
     msgpack_object *val;
 
-    const char *fqdn;
-    size_t fqdn_size;
+    // log_match will hold the value of the property we're interested in:
+    //   for envoy, it will be the fqdn
+    //   for event and audit, it will be the namespace
+    const char *log_match;
+    size_t log_match_size;
+
+    // Choose an extraction function
+    int (*extract) (msgpack_object *log,
+                      const char **match, size_t *match_size, struct platform_log_ctx *ctx);
+
+    if (ctx->source == ENVOY) {
+        extract = extract_fqdn;
+    } else if (ctx->source == EVENT) {
+        extract = extract_ns_from_event_log;
+    } else if (ctx->source == AUDIT) {
+        extract = extract_ns_from_audit_log;
+    } else {
+        flb_plg_error(ctx->ins, "(apply_filter) unexpected source %s", source_type_str(ctx->source));
+        return 0;
+    }
+
     /*
        track the http_code so we only extract it once:
        -1: not extracted,
@@ -809,7 +981,7 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
         key = &(kv+i)->key;
         // val = &(kv+i)->val;
         if (key_cmp(key->via.str.ptr, key->via.str.size, PLATFORM_LOG_INDEX_KEY) == 0) {
-            flb_plg_debug(ctx->ins, "(envoy) found re-emitted record, exit");
+            flb_plg_debug(ctx->ins, "(%s) found re-emitted record, exit", source_type_str(ctx->source));
             return 0;
         }
     }
@@ -819,62 +991,68 @@ static inline int apply_envoy_filter(/*msgpack_packer *packer,*/
         val = &(kv+i)->val;
 
         if (key_cmp(key->via.str.ptr, key->via.str.size, ctx->key) == 0) {
-            flb_plg_trace(ctx->ins, "(envoy) log key found, initiating extraction");
+            flb_plg_trace(ctx->ins, "(%s) log key found, initiating extraction", source_type_str(ctx->source));
 
-            /* first, the fqdn */
-            ret = extract_fqdn(val, &fqdn, &fqdn_size, ctx);
+            ret = extract(val, &log_match, &log_match_size, ctx);
             if ( ret == 1 ) {
-                flb_plg_trace(ctx->ins, "(envoy) found fqdn '%.*s'", (int)fqdn_size, fqdn);
+                flb_plg_trace(ctx->ins, "(%s) found '%.*s'", source_type_str(ctx->source), (int)log_match_size, log_match);
 
                 const char *info_val;
                 int info_val_size;
-                ret = cache_get(ctx->cache, fqdn, fqdn_size, &info_val, &info_val_size);
+                ret = cache_get(ctx->cache, log_match, log_match_size, &info_val, &info_val_size);
                 if ( ret == FLB_TRUE ) {
-                    flb_plg_debug(ctx->ins, "(envoy) found splunk info for fqdn '%.*s'", (int)fqdn_size, fqdn);
+                    flb_plg_debug(ctx->ins, "(%s) found splunk info for '%.*s'", source_type_str(ctx->source), (int)log_match_size, log_match);
 
                     msgpack_unpacked result;
                     size_t off = 0;
                     msgpack_unpacked_init(&result);
                     msgpack_unpack_next(&result, info_val, info_val_size, &off);
 
+                    /* For envoy, apply additional status code filter */
                     /* user-provided http code filter */
-                    msgpack_object *filter_obj = NULL;
-                    enum filter_type filter = default_filter_type();
+                    if (ctx->source == ENVOY) {
+                        msgpack_object *filter_obj = NULL;
+                        enum filter_type filter = default_filter_type();
 
-                    filter_obj = helper_msgpack_map_get("envoyHTTPCodeFilter", &result.data.via.map);
-                    if (filter_obj != NULL) {
-                        get_filter_type(filter_obj->via.str.ptr, filter_obj->via.str.size, &filter);
-                    }
-                    flb_plg_debug(ctx->ins, "(envoy) user-provided filter=%s", filter_type_str(filter));
+                        filter_obj = helper_msgpack_map_get("envoyHTTPCodeFilter", &result.data.via.map);
+                        if (filter_obj != NULL) {
+                            get_filter_type(filter_obj->via.str.ptr, filter_obj->via.str.size, &filter);
+                        }
+                        flb_plg_debug(ctx->ins, "(envoy) user-provided filter=%s", filter_type_str(filter));
 
-                    ret = extract_http_code(val, &http_code, ctx);
-                    flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
+                        ret = extract_http_code(val, &http_code, ctx);
+                        flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
 
-                    if (should_keep_log(filter, http_code)) {
+                        if (should_keep_log(filter, http_code)) {
+                    *emitted = re_emit(ts, map, result.data, ctx);
+                        }
+                    } else {
                         *emitted = re_emit(ts, map, result.data, ctx);
                     }
 
                     msgpack_unpacked_destroy(&result);
-
-                    ret = 1;
                 } else {
-                    flb_plg_trace(ctx->ins, "(envoy) splunk info not found");
+                    flb_plg_trace(ctx->ins, "(%s) splunk info not found", source_type_str(ctx->source));
                 }
 
             } else {
-                // flb_plg_trace(ctx->ins, "(envoy) fqdn not found");
-                // trace?
+                flb_plg_trace(ctx->ins, "(%s) not found", source_type_str(ctx->source));
             }
 
-            /* now, the global http code filter */
-            // TODO: could avoid httpcode extraction if filter is log_all or log_nothing
-            if (http_code == -1) {
-                ret = extract_http_code(val, &http_code, ctx);
-                flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
+            /* For envoy, apply additional status code filter */
+            /* this time, the global http code filter */
+            if (ctx->source == ENVOY) {
+                // TODO: could avoid httpcode extraction if filter is log_all or log_nothing
+                if (http_code == -1) {
+                    ret = extract_http_code(val, &http_code, ctx);
+                    flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
+                }
+                *keep = should_keep_log(ctx->filter, http_code);
+            } else {
+                *keep = FLB_TRUE;
             }
-            *keep = should_keep_log(ctx->filter, http_code);
 
-            flb_plg_debug(ctx->ins, "(envoy) outcome keep=%i, emitted=%i", *keep, *emitted);
+            flb_plg_debug(ctx->ins, "(%s) outcome keep=%i, emitted=%i", source_type_str(ctx->source), *keep, *emitted);
             break;
         }
     }
@@ -998,23 +1176,21 @@ static int cb_pl_filter(const void *data, size_t bytes,
             continue;
         }
 
-        if (ctx->source == ENVOY) {
-            ret = apply_envoy_filter(/*&packer, */&result.data, &keep, &emitted, ctx);
-            if (ret != 0) {
-                flb_plg_warn(ctx->ins, "error applying envoy filter");
-                msgpack_pack_object(&packer, result.data);
-                continue;
-            }
-            if (keep) {
-                /* re-pack the original event */
-                msgpack_pack_object(&packer, result.data);
-            } else {
-                nb_records_deleted++;
-            }
-            if (emitted) {
-                nb_records_emitted++;
-            }
+        ret = apply_filter(/*&packer, */&result.data, &keep, &emitted, ctx);
+        if (ret != 0) {
+            flb_plg_warn(ctx->ins, "error applying filter");
         }
+
+        if (keep) {
+            /* re-pack the original event */
+            msgpack_pack_object(&packer, result.data);
+        } else {
+            nb_records_deleted++;
+        }
+        if (emitted) {
+            nb_records_emitted++;
+        }
+
     }
     msgpack_unpacked_destroy(&result);
 
@@ -1059,12 +1235,12 @@ static struct flb_config_map config_map[] = {
     {
      FLB_CONFIG_MAP_STR, "type", NULL,
      0, FLB_FALSE, 0,
-     "Platform Log source type; only 'envoy' is supported"
+     "Platform Log source type; one of 'envoy', 'event' or 'audit'"
     },
     {
-     FLB_CONFIG_MAP_STR, "envoy_filter", PLATFORM_LOG_FILTER_LOG_5XX,
+     FLB_CONFIG_MAP_STR, "filter", PLATFORM_LOG_FILTER_LOG_5XX,
      0, FLB_FALSE, 0,
-     "Http code filter: one of 'all', 'errors', '5xx' or 'none'"
+     "Http code filter: one of 'all', 'not2xx', 'errors', '5xx' or 'none'"
     },
     {
      FLB_CONFIG_MAP_STR, "key", PLATFORM_LOG_LOG_KEY, //NULL?

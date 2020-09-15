@@ -16,6 +16,10 @@
 #define PLATFORM_LOG_HTTP_CODE_KEY_LEN 13
 #define PLATFORM_LOG_ENVOY_KEY         "envoy"
 #define PLATFORM_LOG_ENVOY_KEY_LEN     5
+#define PLATFORM_LOG_EVENT_KEY         "event"
+#define PLATFORM_LOG_EVENT_KEY_LEN     5
+#define PLATFORM_LOG_AUDIT_KEY         "audit"
+#define PLATFORM_LOG_AUDIT_KEY_LEN     5
 
 /* source or sourcetype: need standard! */
 #define PLATFORM_LOG_SRC_KEY           "source"
@@ -36,16 +40,20 @@
 #define PLATFORM_LOG_MEM_BUF_LIMIT     "10M"
 
 #define PLATFORM_LOG_FILTER_LOG_ALL    "all"
+#define PLATFORM_LOG_FILTER_LOG_UNS    "not2xx"
 #define PLATFORM_LOG_FILTER_LOG_ERR    "errors"
 #define PLATFORM_LOG_FILTER_LOG_5XX    "5xx"
 #define PLATFORM_LOG_FILTER_LOG_NOT    "none"
 
 enum source_type {
-    ENVOY
+    ENVOY,
+    EVENT,
+    AUDIT,
 };
 
 enum filter_type {
     FILTER_LOG_ALL, /* log everything */
+    FILTER_LOG_UNS, /* log unsuccessful responses (all but 2XX) */
     FILTER_LOG_ERR, /* log server and client errors */
     FILTER_LOG_5XX, /* log server errors only */
     FILTER_LOG_NOT, /* log nothing */

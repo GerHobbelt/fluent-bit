@@ -16,6 +16,12 @@ A stands for Adobe's changes
 
 # Log
 
+## 1.5.4-0.3.0-adobe
+
+- added support for event and audit logs
+- added new http filter `not2xx`
+- renamed option `Envoy_Filter` to `Filter`
+
 ## 1.5.4-0.2.0-adobe
 
 - built from v1.5.4
