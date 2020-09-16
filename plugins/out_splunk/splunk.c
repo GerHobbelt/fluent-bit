@@ -194,6 +194,7 @@ static void cb_splunk_flush(const void *data, size_t bytes,
 
     flb_http_add_header(c, "Authorization", 13,
                         ctx->auth_header, flb_sds_len(ctx->auth_header));
+    flb_plg_debug(ctx->ins, "posting payload to %s", ctx->ins->host.name);
     ret = flb_http_do(c, &b_sent);
     if (ret != 0) {
         flb_plg_warn(ctx->ins, "http_do=%i", ret);
