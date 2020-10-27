@@ -603,12 +603,12 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     }
 
     /* filter */
-    tmp = flb_filter_get_property("envoy_filter", ctx->ins);
+    tmp = flb_filter_get_property("filter", ctx->ins);
     if (tmp) {
         ret = get_filter_type(tmp, strlen(tmp), &(ctx->filter));
         if (ret == -1) {
-            flb_plg_error(ctx->ins, "Configuration \"envoy_filter\" has invalid value "
-                          "'%s'. Only 'all', 'errors', '5xx' and 'none' are supported\n",
+            flb_plg_error(ctx->ins, "Configuration \"filter\" has invalid value "
+                          "'%s'. Only 'all', 'not2xx', 'errors', '5xx' and 'none' are supported\n",
                           tmp);
           return -1;
         }
@@ -651,13 +651,13 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     load_data(ctx);
     // cache_dump(ctx->cache);
 
-    // TODO: parameterize
-    ctx->ttl = PLATFORM_CACHE_TTL_SECS;
+    tmp = flb_filter_get_property("ttl", ctx->ins);
+    ctx->ttl = tmp ? atoi(tmp) : PLATFORM_CACHE_TTL_SECS;
 
     flb_plg_info(ctx->ins,
-                 "source=%s filter=%s key=%s cache=%i",
+                 "source=%s filter=%s key=%s cache=%i ttl=%i",
                  source_type_str(ctx->source), filter_type_str(ctx->filter),
-                 ctx->key, cache_size(ctx->cache));
+                 ctx->key, cache_size(ctx->cache), ctx->ttl);
 
     /* re-emitter (from rewrite_tag.c) */
     int coll_fd;
@@ -1024,7 +1024,7 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
                         flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
 
                         if (should_keep_log(filter, http_code)) {
-                    *emitted = re_emit(ts, map, result.data, ctx);
+                    *emitted = re_emit(ts, map, result.data, ctx); //format?
                         }
                     } else {
                         *emitted = re_emit(ts, map, result.data, ctx);
@@ -1246,6 +1246,11 @@ static struct flb_config_map config_map[] = {
      FLB_CONFIG_MAP_STR, "key", PLATFORM_LOG_LOG_KEY, //NULL?
      0, FLB_FALSE, 0,
      "Input log key where the payload is located"
+    },
+    {
+     FLB_CONFIG_MAP_INT, "ttl", NULL,
+     0, FLB_FALSE, 0,
+     "Cache TTL in seconds"
     },
 
     /* k8s */

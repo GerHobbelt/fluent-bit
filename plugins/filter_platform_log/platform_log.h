@@ -33,7 +33,7 @@
 
 #define PLATFORM_CACHE_SIZE            100
 #define PLATFORM_CACHE_SIZE_MAX        500
-#define PLATFORM_CACHE_TTL_SECS        30 //240 /* should be less than 5min */
+#define PLATFORM_CACHE_TTL_SECS        180 /* should be less than 5min */
 
 #define PLATFORM_LOG_METRIC_EMITTED    298
 #define PLATFORM_LOG_METRIC_DELETED    299

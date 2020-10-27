@@ -16,6 +16,11 @@ A stands for Adobe's changes
 
 # Log
 
+## 1.5.6-0.4.0-adobe
+
+- configurable cache ttl
+- fix issue with option `Filter` being ignored
+
 ## 1.5.6-0.3.0-adobe
 
 - built from v1.5.6
