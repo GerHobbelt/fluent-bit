@@ -195,7 +195,7 @@ int platform_log_get_output_splunk(struct msgpack_object *out,
         if (spl_obj.type == MSGPACK_OBJECT_MAP && spl_obj.via.map.size == 1) {
             *splunk = spl_obj.via.map.ptr[0].val;
             ret = FLB_TRUE;
-             // todo: test if "key" == "splunk"; recurse too!
+            // todo: test if "key" == "splunk"; recurse too!
         }
     }
     return ret;
@@ -333,7 +333,7 @@ static int platform_log_apply_fn(struct platform_log_ctx *ctx, msgpack_object *p
     /*
         for envoy, the cache is keyed by fqdn;
         for event and audit, the key is the namespace
-    */
+     */
 
     if (ctx->source == ENVOY) {
         msgpack_object splunk;
@@ -454,7 +454,7 @@ int load_delta(struct platform_log_ctx *ctx)
                 elem is a map with 2 keys:
                 type: ADDED | DELETED | MODIFIED
                 object: a platform_log object
-            */
+             */
 
             if (elem->type != MSGPACK_OBJECT_MAP) {
                 fprintf(stderr, "(delta) not a map!\n");
@@ -477,20 +477,20 @@ int load_delta(struct platform_log_ctx *ctx)
                 v = &(kv+j)->val;
 
                 if (key_cmp(k->via.str.ptr, k->via.str.size, "type") == 0) {
-                   if (key_cmp(v->via.str.ptr, v->via.str.size, "ADDED") == 0) {
-                       f = &src_cache_add;
-                   } else if (key_cmp(v->via.str.ptr, v->via.str.size, "DELETED") == 0) {
-                       f = &src_cache_delete;
-                   } else if (key_cmp(v->via.str.ptr, v->via.str.size, "MODIFIED") == 0) {
-                       f = &src_cache_update;
-                   }
-                   continue;
+                    if (key_cmp(v->via.str.ptr, v->via.str.size, "ADDED") == 0) {
+                        f = &src_cache_add;
+                    } else if (key_cmp(v->via.str.ptr, v->via.str.size, "DELETED") == 0) {
+                        f = &src_cache_delete;
+                    } else if (key_cmp(v->via.str.ptr, v->via.str.size, "MODIFIED") == 0) {
+                        f = &src_cache_update;
+                    }
+                    continue;
                 }
 
                 if (key_cmp(k->via.str.ptr, k->via.str.size, "object") == 0) {
-                   pl = v;
+                    pl = v;
                 }
-           }
+            }
 
             if (pl && f) {
                 platform_log_apply_fn(ctx, pl, f);
@@ -573,8 +573,8 @@ void cache_create_dummy_data(struct platform_log_ctx *ctx)
 
 
 /*
-* filter utils
-*/
+ * filter utils
+ */
 static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 {
     int ret;
@@ -582,7 +582,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 
     /*
         Process filter properties
-    */
+     */
     /* source */
     tmp = flb_filter_get_property("type", ctx->ins);
     if (tmp) {
@@ -596,7 +596,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
             flb_plg_error(ctx->ins, "Configuration \"Type\" has invalid value "
                           "'%s'. Only 'envoy', 'event' and 'audit' are supported\n",
                           tmp);
-          return -1;
+            return -1;
         }
     } else {
         ctx->source = ENVOY;
@@ -610,7 +610,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
             flb_plg_error(ctx->ins, "Configuration \"filter\" has invalid value "
                           "'%s'. Only 'all', 'not2xx', 'errors', '5xx' and 'none' are supported\n",
                           tmp);
-          return -1;
+            return -1;
         }
     } else {
         ctx->filter = default_filter_type();
@@ -623,7 +623,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
 
     /* re-emitter config; hard-coded for now */
     ctx->emitter_name = flb_strdup("emitter_for_platform_log");
-    ctx->emitter_storage_type = flb_strdup("filesystem");        /* could be memory */
+    ctx->emitter_storage_type = flb_strdup("filesystem"); /* could be memory */
     ctx->emitter_mem_buf_limit = flb_utils_size_to_bytes(PLATFORM_LOG_MEM_BUF_LIMIT);
 
     /* initialize cache */
@@ -651,6 +651,7 @@ static int configure(struct platform_log_ctx *ctx, struct flb_config *config)
     load_data(ctx);
     // cache_dump(ctx->cache);
 
+    /* cache TTL */
     tmp = flb_filter_get_property("ttl", ctx->ins);
     ctx->ttl = tmp ? atoi(tmp) : PLATFORM_CACHE_TTL_SECS;
 
@@ -750,7 +751,7 @@ static void teardown(struct platform_log_ctx *ctx)
 
 /*
     extraction helpers
-*/
+ */
 static inline int log_extract_key(msgpack_object* log, const char *key,
                                   const char **val, size_t *val_size,
                                   struct platform_log_ctx *ctx)
@@ -758,7 +759,7 @@ static inline int log_extract_key(msgpack_object* log, const char *key,
     /*
         only handle json-formatted Envoy logs, which msgpack would have already
         deserialized into a map
-    */
+     */
     if (log->type != MSGPACK_OBJECT_MAP)
     {
         flb_plg_debug(ctx->ins, "(extract) ignoring log type %u", log->type);
@@ -956,7 +957,7 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
 
     // Choose an extraction function
     int (*extract) (msgpack_object *log,
-                      const char **match, size_t *match_size, struct platform_log_ctx *ctx);
+                    const char **match, size_t *match_size, struct platform_log_ctx *ctx);
 
     if (ctx->source == ENVOY) {
         extract = extract_fqdn;
@@ -973,7 +974,7 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
        track the http_code so we only extract it once:
        -1: not extracted,
         0: extracted, not found/invalid
-    */
+     */
     int http_code = -1;
 
     /* first pass - check if the records was re-emitted */
@@ -1024,7 +1025,7 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
                         flb_plg_trace(ctx->ins, "(envoy) httpcode %i (ret: %i)", http_code, ret);
 
                         if (should_keep_log(filter, http_code)) {
-                    *emitted = re_emit(ts, map, result.data, ctx); //format?
+                            *emitted = re_emit(ts, map, result.data, ctx); //format?
                         }
                     } else {
                         *emitted = re_emit(ts, map, result.data, ctx);
@@ -1062,8 +1063,8 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
 
 
 /*
-* filter proper
-*/
+ * filter proper
+ */
 static int cb_pl_init(struct flb_filter_instance *f_ins,
                       struct flb_config *config, void *data)
 {
@@ -1071,8 +1072,8 @@ static int cb_pl_init(struct flb_filter_instance *f_ins,
 
     ctx = flb_malloc(sizeof(struct platform_log_ctx));
     if (!ctx) {
-      flb_errno();
-      return -1;
+        flb_errno();
+        return -1;
     }
     ctx->ins = f_ins;
 
@@ -1233,58 +1234,58 @@ static int cb_pl_exit(void *data, struct flb_config *config)
 static struct flb_config_map config_map[] = {
     /* platform_log */
     {
-     FLB_CONFIG_MAP_STR, "type", NULL,
-     0, FLB_FALSE, 0,
-     "Platform Log source type; one of 'envoy', 'event' or 'audit'"
+        FLB_CONFIG_MAP_STR, "type", NULL,
+        0, FLB_FALSE, 0,
+        "Platform Log source type; one of 'envoy', 'event' or 'audit'"
     },
     {
-     FLB_CONFIG_MAP_STR, "filter", PLATFORM_LOG_FILTER_LOG_5XX,
-     0, FLB_FALSE, 0,
-     "Http code filter: one of 'all', 'not2xx', 'errors', '5xx' or 'none'"
+        FLB_CONFIG_MAP_STR, "filter", PLATFORM_LOG_FILTER_LOG_5XX,
+        0, FLB_FALSE, 0,
+        "Http code filter: one of 'all', 'not2xx', 'errors', '5xx' or 'none'"
     },
     {
-     FLB_CONFIG_MAP_STR, "key", PLATFORM_LOG_LOG_KEY, //NULL?
-     0, FLB_FALSE, 0,
-     "Input log key where the payload is located"
+        FLB_CONFIG_MAP_STR, "key", PLATFORM_LOG_LOG_KEY, //NULL?
+        0, FLB_FALSE, 0,
+        "Input log key where the payload is located"
     },
     {
-     FLB_CONFIG_MAP_INT, "ttl", NULL,
-     0, FLB_FALSE, 0,
-     "Cache TTL in seconds"
+        FLB_CONFIG_MAP_INT, "ttl", NULL,
+        0, FLB_FALSE, 0,
+        "Cache TTL in seconds"
     },
 
     /* k8s */
     {
-     FLB_CONFIG_MAP_STR, "k8s_host", PLATFORM_LOG_K8S_API_HOST,
-     0, FLB_TRUE, offsetof(struct k8s_conf, api_host),
-     "Kubernetes API server host"
+        FLB_CONFIG_MAP_STR, "k8s_host", PLATFORM_LOG_K8S_API_HOST,
+        0, FLB_TRUE, offsetof(struct k8s_conf, api_host),
+        "Kubernetes API server host"
     },
     {
-     FLB_CONFIG_MAP_INT, "k8s_port", PLATFORM_LOG_K8S_API_PORT,
-     0, FLB_TRUE, offsetof(struct k8s_conf, api_port),
-     "Kubernetes API server port"
+        FLB_CONFIG_MAP_INT, "k8s_port", PLATFORM_LOG_K8S_API_PORT,
+        0, FLB_TRUE, offsetof(struct k8s_conf, api_port),
+        "Kubernetes API server port"
     },
     {
-     FLB_CONFIG_MAP_BOOL, "k8s_use_tls", "true",
-     0, FLB_TRUE, offsetof(struct k8s_conf, use_tls),
-     "Kubernetes API server uses TLS"
+        FLB_CONFIG_MAP_BOOL, "k8s_use_tls", "true",
+        0, FLB_TRUE, offsetof(struct k8s_conf, use_tls),
+        "Kubernetes API server uses TLS"
     },
     {
-     FLB_CONFIG_MAP_STR, "k8s_ca_file", PLATFORM_LOG_K8S_CA_FILE,
-     0, FLB_TRUE, offsetof(struct k8s_conf, tls_ca_file),
-     "Kubernetes TLS CA file"
+        FLB_CONFIG_MAP_STR, "k8s_ca_file", PLATFORM_LOG_K8S_CA_FILE,
+        0, FLB_TRUE, offsetof(struct k8s_conf, tls_ca_file),
+        "Kubernetes TLS CA file"
     },
     /*
     {
-     FLB_CONFIG_MAP_STR, "k8s_ca_path", NULL,
-     0, FLB_TRUE, offsetof(struct k8s_conf, tls_ca_path),
-     "Kubernetes TLS ca path"
+        FLB_CONFIG_MAP_STR, "k8s_ca_path", NULL,
+        0, FLB_TRUE, offsetof(struct k8s_conf, tls_ca_path),
+        "Kubernetes TLS ca path"
     },
     */
     {
-     FLB_CONFIG_MAP_STR, "k8s_token_file", PLATFORM_LOG_K8S_TOKEN_FILE,
-     0, FLB_TRUE, offsetof(struct k8s_conf, token_file),
-     "Kubernetes authorization token file"
+        FLB_CONFIG_MAP_STR, "k8s_token_file", PLATFORM_LOG_K8S_TOKEN_FILE,
+        0, FLB_TRUE, offsetof(struct k8s_conf, token_file),
+        "Kubernetes authorization token file"
     },
 
     /* EOF */

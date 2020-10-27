@@ -253,7 +253,7 @@ int k8s_pl_delta_wip(struct k8s_conf *k8s, char **out_buf, size_t *out_bytes)
         delta is a stream of json strings, so we put them in an array to create a
         single json string that can be packed ont its own
         otherwise, flb_pack_json stops after the first valid json
-    */
+     */
 
     // TODO: realloc; if same pointer, memmove / memset
     pl_json_size = pl_stream_size + 2;
