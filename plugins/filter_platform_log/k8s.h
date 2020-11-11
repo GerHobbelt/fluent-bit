@@ -8,7 +8,7 @@
 #define PLATFORM_LOG_K8S_CA_FILE       "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 #define PLATFORM_LOG_K8S_TOKEN_FILE    "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
-#define PLATFORM_LOG_K8S_LIST_API      "/apis/adobeplatform.adobe.io/v1alpha1/platformlogs"
+#define PLATFORM_LOG_K8S_LIST_API      "/apis/adobeplatform.adobe.io/v1alpha1/platformlogs?limit=5000"
 #define PLATFORM_LOG_K8S_WATCH_API     "/apis/adobeplatform.adobe.io/v1alpha1/platformlogs?watch=1&resourceVersion="
 #define PLATFORM_LOG_K8S_WATCH_API_FMT "/apis/adobeplatform.adobe.io/v1alpha1/platformlogs?watch=1&resourceVersion=%s"
 
@@ -27,6 +27,9 @@ struct k8s_conf {
     /* Pre-formatted HTTP Authorization header value */
     char *auth;
     size_t auth_len;
+
+    /* HTTP buffer size */
+    size_t buffer_size;
 
     struct flb_upstream *upstream;
     struct flb_tls tls;

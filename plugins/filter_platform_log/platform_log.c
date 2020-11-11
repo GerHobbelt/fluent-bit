@@ -1287,6 +1287,11 @@ static struct flb_config_map config_map[] = {
         0, FLB_TRUE, offsetof(struct k8s_conf, token_file),
         "Kubernetes authorization token file"
     },
+    {
+        FLB_CONFIG_MAP_SIZE, "buffer_size", "false",
+        0, FLB_TRUE, offsetof(struct k8s_conf, buffer_size),
+        NULL
+    },
 
     /* EOF */
     {0}

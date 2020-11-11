@@ -156,7 +156,7 @@ int k8s_http_get(struct k8s_conf *k8s, const char *uri, char **out_buf, size_t *
         return -1;
     }
 
-    flb_http_buffer_size(c, 32768/*ctx->buffer_size*/); //TODO
+    flb_http_buffer_size(c, k8s->buffer_size);
     flb_http_add_header(c, "User-Agent", 10, "Fluent-Bit", 10);
     flb_http_add_header(c, "Connection", 10, "close", 5);
     flb_http_add_header(c, "Authorization", 13, k8s->auth, k8s->auth_len);
@@ -168,7 +168,8 @@ int k8s_http_get(struct k8s_conf *k8s, const char *uri, char **out_buf, size_t *
     if (ret != 0) {
         return -1;
     }
-    flb_plg_debug(k8s->ins, "http_do=%i, HTTP Status=%i", ret, c->resp.status);
+    flb_plg_debug(k8s->ins, "http_do=%i, HTTP Status=%i, size=%i, buffer=%i",
+                             ret, c->resp.status, c->resp.payload_size, k8s->buffer_size);
     // flb_plg_debug(k8s->ins, "%.*s", (int)c->resp.payload_size, c->resp.payload);
 
     char *ret_buf;
