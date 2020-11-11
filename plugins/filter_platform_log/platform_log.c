@@ -1108,7 +1108,7 @@ static int cb_pl_filter(const void *data, size_t bytes,
     (void) f_ins;
     (void) config;
     time_t cache_age;
-    int cache_s;
+    int cache_s, cache_o;
 
     flb_plg_debug(ctx->ins, "*** PLATFORM LOG FILTER :: BEGIN ***");
 
@@ -1116,6 +1116,7 @@ static int cb_pl_filter(const void *data, size_t bytes,
 
     /* refresh cache if needed */
     cache_age = time(NULL) - ctx->updated;
+    cache_o = cache_size(ctx->cache);
     if (cache_age > ctx->ttl /*|| FLB_TRUE*/) {
         flb_plg_debug(ctx->ins, "cache updated %is ago, refreshing", cache_age);
         int delta;
@@ -1134,7 +1135,11 @@ static int cb_pl_filter(const void *data, size_t bytes,
     }
 
     cache_s = cache_size(ctx->cache);
-    flb_plg_debug(ctx->ins, "cache=%i", cache_s);
+    if (cache_s == cache_o) {
+        flb_plg_debug(ctx->ins, "cache=%i", cache_s);
+    } else {
+        flb_plg_info(ctx->ins, "cache=%i", cache_s);
+    }
 
     // no mappings, no touch.
     if (cache_s == 0) {
