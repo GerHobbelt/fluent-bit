@@ -16,6 +16,11 @@ A stands for Adobe's changes
 
 # Log
 
+## 1.5.6-0.5.0-adobe
+
+- configurable http buffer size (default unlimited)
+- changed user default envoy filter to `not2xx`
+
 ## 1.5.6-0.4.0-adobe
 
 - configurable cache ttl
