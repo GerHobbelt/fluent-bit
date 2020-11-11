@@ -50,6 +50,11 @@ static inline enum filter_type default_filter_type() {
     return FILTER_LOG_ALL;
 }
 
+static inline enum filter_type default_user_filter_type() {
+    /* default to not2xx */
+    return FILTER_LOG_UNS;
+}
+
 static inline int get_filter_type(const char *val, int len,
                                   enum filter_type *type)
 {
@@ -1013,7 +1018,7 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
                     /* user-provided http code filter */
                     if (ctx->source == ENVOY) {
                         msgpack_object *filter_obj = NULL;
-                        enum filter_type filter = default_filter_type();
+                        enum filter_type filter = default_user_filter_type();
 
                         filter_obj = helper_msgpack_map_get("envoyHTTPCodeFilter", &result.data.via.map);
                         if (filter_obj != NULL) {
