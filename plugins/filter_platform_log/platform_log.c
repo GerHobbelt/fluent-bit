@@ -1058,7 +1058,8 @@ static inline int apply_filter(/*msgpack_packer *packer,*/
                 *keep = FLB_TRUE;
             }
 
-            flb_plg_debug(ctx->ins, "(%s) outcome keep=%i, emitted=%i", source_type_str(ctx->source), *keep, *emitted);
+            flb_plg_debug(ctx->ins, "(%s) outcome total=%i, keep=%i, emitted=%i",
+                          source_type_str(ctx->source), map.via.map.size, *keep, *emitted);
             break;
         }
     }
@@ -1142,7 +1143,8 @@ static int cb_pl_filter(const void *data, size_t bytes,
     }
 
     // no mappings, no touch.
-    if (cache_s == 0) {
+    // except for Envoy with filtering on
+    if ( (cache_s == 0) && ( (ctx->source != ENVOY) || (ctx->source == ENVOY && ctx->filter == FILTER_LOG_ALL) ) ) {
         flb_plg_debug(ctx->ins, "*** PLATFORM LOG FILTER :: END / NO MODIF (nada) ***");
         return FLB_FILTER_NOTOUCH;
     }
