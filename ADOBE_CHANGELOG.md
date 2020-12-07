@@ -16,6 +16,10 @@ A stands for Adobe's changes
 
 # Log
 
+## 1.5.7-0.6.0-adobe
+
+- envoy: search requested_server_name first; fallback on authority
+
 ## 1.5.7-0.5.1-adobe
 
 - built from v1.5.7
