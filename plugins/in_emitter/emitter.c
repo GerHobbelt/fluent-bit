@@ -175,7 +175,11 @@ static int cb_emitter_init(struct flb_input_instance *in,
     flb_input_set_context(in, ctx);
 
     /* Set a collector to trigger the callback to queue data every 0.5 second */
+    /*
     ret = flb_input_set_collector_time(in, cb_queue_chunks, 0, 50000000, config);
+    // using only nanoseconds parameter is not working for some reason...
+    */
+    ret = flb_input_set_collector_time(in, cb_queue_chunks, 1, 0, config);
     if (ret < 0) {
         flb_plg_error(ctx->ins, "could not create collector");
         flb_free(ctx);
