@@ -788,7 +788,15 @@ static inline int extract_fqdn(msgpack_object *log,
                                const char **fqdn, size_t *fqdn_size,
                                struct platform_log_ctx *ctx)
 {
-    return log_extract_key(log, PLATFORM_LOG_FQDN_KEY, fqdn, fqdn_size, ctx);
+    int ret;
+    ret = log_extract_key(log, PLATFORM_LOG_FQDN_KEY1, fqdn, fqdn_size, ctx);
+    /* Envoy will set the key to "-" when the data is not available */
+    /* so check for len=2 at a minimum */
+    if (ret == 1 && *fqdn_size > 1) {
+        return ret;
+    }
+    flb_plg_debug(ctx->ins, "(extract_fqdn) trying secondary key");
+    return log_extract_key(log, PLATFORM_LOG_FQDN_KEY2, fqdn, fqdn_size, ctx);
 }
 
 static inline int extract_http_code(msgpack_object *log,

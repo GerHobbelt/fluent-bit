@@ -10,8 +10,10 @@
 
 #define PLATFORM_LOG_LOG_KEY           "log"
 #define PLATFORM_LOG_LOG_KEY_LEN       3
-#define PLATFORM_LOG_FQDN_KEY          "authority"
-#define PLATFORM_LOG_FQDN_KEY_LEN      9
+#define PLATFORM_LOG_FQDN_KEY1         "requested_server_name"
+#define PLATFORM_LOG_FQDN_KEY1_LEN     21
+#define PLATFORM_LOG_FQDN_KEY2         "authority"
+#define PLATFORM_LOG_FQDN_KEY2_LEN     9
 #define PLATFORM_LOG_HTTP_CODE_KEY     "response_code"
 #define PLATFORM_LOG_HTTP_CODE_KEY_LEN 13
 #define PLATFORM_LOG_ENVOY_KEY         "envoy"
