@@ -112,19 +112,12 @@ static inline int should_keep_log(enum filter_type ftype, int http_code)
     return ret;
 }
 
-msgpack_object *helper_msgpack_map_get(const char *key,
+static inline msgpack_object *helper_msgpack_map_get(const char *key,
                                        msgpack_object_map *map)
 {
-
-    msgpack_object_kv *kv = map->ptr;
-    msgpack_object *k;
-    static msgpack_object *v = NULL;
     for (int i = 0; i < map->size; i++) {
-        k = &(kv+i)->key;
-        v = &(kv+i)->val;
-
-        if (key_cmp(k->via.str.ptr, k->via.str.size, key) == 0) {
-            return v;
+        if (key_cmp(map->ptr[i].key.via.str.ptr, map->ptr[i].key.via.str.size, key) == 0) {
+            return &map->ptr[i].val;
         }
     }
     return NULL;
@@ -773,15 +766,27 @@ static inline int log_extract_key(msgpack_object* log, const char *key,
 
     msgpack_object *ret;
     ret = helper_msgpack_map_get(key, &log->via.map);
-    if (ret != NULL) {
-        flb_plg_debug(ctx->ins, "(extract) found %s=%.*s", key, ret->via.str.size, ret->via.str.ptr);
-        *val = ret->via.str.ptr;
-        *val_size = ret->via.str.size;
-        return 1;
-    } else {
+
+    if (ret == NULL) {
         flb_plg_debug(ctx->ins, "(extract) key '%s' not found", key);
+        return 0;
     }
-    return 0;
+
+    switch (ret->type) {
+        case MSGPACK_OBJECT_NIL:
+            flb_plg_debug(ctx->ins, "(extract) found %s=null", key);
+            *val = "";
+            *val_size = 0;
+            return 1;
+        case MSGPACK_OBJECT_STR:
+            flb_plg_debug(ctx->ins, "(extract) found %s=%.*s", key, ret->via.str.size, ret->via.str.ptr);
+            *val = ret->via.str.ptr;
+            *val_size = ret->via.str.size;
+            return 1;
+        default:
+            flb_plg_warn(ctx->ins, "(extract) found %s, unhandled type=%i", key, ret->type);
+            return 0;
+    }
 }
 
 static inline int extract_fqdn(msgpack_object *log,
@@ -803,17 +808,37 @@ static inline int extract_http_code(msgpack_object *log,
                                     int *http_code,
                                     struct platform_log_ctx *ctx)
 {
-    int ret;
-    const char *hcode;
-    size_t hcode_size;
-
-    ret = log_extract_key(log, PLATFORM_LOG_HTTP_CODE_KEY, &hcode, &hcode_size, ctx);
-    if (ret == 1) {
-        *http_code = atoi(hcode);
-        return 1;
-    }
     *http_code = 0;
-    return 0;
+    msgpack_object *ret;
+
+    if (log->type != MSGPACK_OBJECT_MAP)
+    {
+        flb_plg_debug(ctx->ins, "(extract_code) ignoring log type %u", log->type);
+        return 0;
+    }
+
+    ret = helper_msgpack_map_get(PLATFORM_LOG_HTTP_CODE_KEY, &log->via.map);
+    if (ret == NULL) {
+        flb_plg_debug(ctx->ins, "(extract_code) key '%s' not found", PLATFORM_LOG_HTTP_CODE_KEY);
+        return 0;
+    }
+
+    switch (ret->type) {
+        case MSGPACK_OBJECT_NIL:
+            *http_code = 1;
+            return 1;
+        case MSGPACK_OBJECT_POSITIVE_INTEGER:
+            flb_plg_debug(ctx->ins, "(extract_code) found %s=%i (int)", PLATFORM_LOG_HTTP_CODE_KEY, ret->via.i64);
+            *http_code = ret->via.i64;
+            return 1;
+        case MSGPACK_OBJECT_STR:
+            flb_plg_debug(ctx->ins, "(extract_code) found %s=%.*s (str)", PLATFORM_LOG_HTTP_CODE_KEY, ret->via.str.size, ret->via.str.ptr);
+            *http_code = atoi(ret->via.str.ptr);
+            return 1;
+        default:
+            flb_plg_warn(ctx->ins, "(extract_code) found %s, unhandled type=%i", PLATFORM_LOG_HTTP_CODE_KEY, ret->type);
+            return 0;
+    }
 }
 
 
