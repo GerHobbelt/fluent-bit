@@ -6,6 +6,8 @@ set(FLB_VERSION_MAJOR  1)
 set(FLB_VERSION_MINOR  8)
 set(FLB_VERSION_PATCH  9)
 set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}")
+set(FLB_VERSION_ADOBE  "0.7.0-adobe")
+set(FLB_VERSION_STR "${FLB_VERSION_MAJOR}.${FLB_VERSION_MINOR}.${FLB_VERSION_PATCH}-${FLB_VERSION_ADOBE}")
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
@@ -198,6 +200,7 @@ option(FLB_FILTER_MULTILINE   "Enable multiline filter"             Yes)
 option(FLB_FILTER_NEST        "Enable nest filter"                  Yes)
 option(FLB_FILTER_LUA         "Enable Lua scripting filter"         Yes)
 option(FLB_FILTER_RECORD_MODIFIER "Enable record_modifier filter"   Yes)
+option(FLB_FILTER_PLATFORM_LOG    "Enable platform_log filter"      Yes)
 option(FLB_FILTER_TENSORFLOW  "Enable tensorflow filter"             No)
 option(FLB_FILTER_GEOIP2      "Enable geoip2 filter"                Yes)
 
