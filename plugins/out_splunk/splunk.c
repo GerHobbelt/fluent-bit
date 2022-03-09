@@ -560,7 +560,12 @@ static void cb_splunk_flush(const void *data, size_t bytes,
 
     /* Splunk URI endpoint */
     if (ctx->splunk_send_raw) {
-        endpoint = FLB_SPLUNK_DEFAULT_URI_RAW;
+        /*
+           Revert to 1.6 functionnality
+             fluent-bit only sends json-formated payloads, so doesn't need
+             to send to the /raw endpoint
+        */
+        endpoint = FLB_SPLUNK_DEFAULT_URI_EVENT;
     }
     else {
         endpoint = FLB_SPLUNK_DEFAULT_URI_EVENT;
@@ -615,7 +620,12 @@ static void cb_splunk_flush(const void *data, size_t bytes,
     flb_http_client_debug(c, ctx->ins->callback);
 
     /* Perform HTTP request */
+    flb_plg_debug(ctx->ins, "posting payload to %s%s", ctx->ins->host.name, endpoint);
+
     ret = flb_http_do(c, &b_sent);
+
+    flb_plg_debug(ctx->ins, "http_status=%i:\n%s", c->resp.status, c->resp.payload);
+
     if (ret != 0) {
         flb_plg_warn(ctx->ins, "http_do=%i", ret);
         ret = FLB_RETRY;
