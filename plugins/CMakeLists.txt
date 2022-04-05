@@ -284,6 +284,7 @@ if(FLB_REGEX)
   REGISTER_FILTER_PLUGIN("filter_multiline")
   REGISTER_FILTER_PLUGIN("filter_nest")
   REGISTER_FILTER_PLUGIN("filter_parser")
+  REGISTER_FILTER_PLUGIN("filter_platform_log")
 endif()
 
 if(FLB_RECORD_ACCESSOR)
