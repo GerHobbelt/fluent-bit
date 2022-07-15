@@ -388,6 +388,9 @@ int flb_output_thread_pool_flush(struct flb_task *task,
 
     n = flb_pipe_w(th_ins->ch_parent_events[1], &task, sizeof(struct flb_task*));
 
+    flb_plg_debug(out_ins, "task_id=%i returned #%i",
+                  task->id, n);
+    
     if (n == -1) {
         flb_errno();
         return -1;
