@@ -386,11 +386,11 @@ int flb_output_thread_pool_flush(struct flb_task *task,
     flb_plg_debug(out_ins, "task_id=%i assigned to thread #%i",
                   task->id, th->id);
 
-    n = flb_pipe_w(th_ins->ch_parent_events[1], &task, sizeof(struct flb_task*));
+    n = flb_pipe_w(th_ins->ch_parent_events[1], &task, sizeof(struct task));
 
     flb_plg_debug(out_ins, "task_id=%i returned %i, should write %i",
-                  task->id, n, sizeof(struct flb_task*));
-    
+                  task->id, n, sizeof(struct task));
+
     if (n == -1) {
         flb_errno();
         return -1;
