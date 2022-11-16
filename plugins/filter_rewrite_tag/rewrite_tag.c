@@ -324,7 +324,7 @@ static int process_record(const char *tag, int tag_len, msgpack_object map,
         return FLB_FALSE;
     }
 
-    flb_info("process_record tag: %s", tag);
+    flb_info("%s process_record tag: %s", ctx->emitter_name, tag);
     *matched = FLB_FALSE;
 
     mk_list_foreach(head, &ctx->rules) {

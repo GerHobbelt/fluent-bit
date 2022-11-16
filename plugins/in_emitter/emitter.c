@@ -83,6 +83,7 @@ int static do_in_emitter_add_record(struct em_chunk *ec,
     struct flb_emitter *ctx = (struct flb_emitter *) in->context;
     int ret;
 
+    flb_info("%s do_in_emitter_add_record tag: %s", in->name, tag);
     /* Associate this backlog chunk to this instance into the engine */
     ret = flb_input_log_append(in,
                                ec->tag, flb_sds_len(ec->tag),
@@ -115,7 +116,7 @@ int in_emitter_add_record(const char *tag, int tag_len,
 
     ctx = (struct flb_emitter *) in->context;
 
-    flb_info("in_emitter_add_record tag: %s", tag);
+    flb_info("%s in_emitter_add_record tag: %s", in->name, tag);
 
     /* Use the ring buffer first if it exists */
     if (ctx->msgs) {
