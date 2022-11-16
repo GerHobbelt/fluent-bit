@@ -83,7 +83,7 @@ int static do_in_emitter_add_record(struct em_chunk *ec,
     struct flb_emitter *ctx = (struct flb_emitter *) in->context;
     int ret;
 
-    flb_info("%s do_in_emitter_add_record tag: %s", in->name, tag);
+    flb_info("%s do_in_emitter_add_record tag: %s", in->name, ec->tag);
     /* Associate this backlog chunk to this instance into the engine */
     ret = flb_input_log_append(in,
                                ec->tag, flb_sds_len(ec->tag),
