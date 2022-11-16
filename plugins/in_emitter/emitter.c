@@ -115,6 +115,8 @@ int in_emitter_add_record(const char *tag, int tag_len,
 
     ctx = (struct flb_emitter *) in->context;
 
+    flb_info("in_emitter_add_record");
+
     /* Use the ring buffer first if it exists */
     if (ctx->msgs) {
         ec = flb_calloc(1, sizeof(struct em_chunk));
