@@ -496,6 +496,7 @@ static int cb_queue_chunks(struct flb_input_instance *in,
 
     /* If we already hitted our limit, just wait and re-check later */
     if (total >= ctx->mem_limit) {
+        flb_plg_info(ctx->ins, "mem limit reached: %s %s", total, ctx->mem_limit);
         return 0;
     }
 
