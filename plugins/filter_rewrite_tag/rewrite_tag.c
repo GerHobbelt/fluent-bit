@@ -323,6 +323,8 @@ static int process_record(const char *tag, int tag_len, msgpack_object map,
     if (matched == NULL) {
         return FLB_FALSE;
     }
+
+    flb_info("process_record tag: %s", tag);
     *matched = FLB_FALSE;
 
     mk_list_foreach(head, &ctx->rules) {
