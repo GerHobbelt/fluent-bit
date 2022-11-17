@@ -23,6 +23,7 @@
 #include <fluent-bit/flb_utils.h>
 #include <fluent-bit/flb_time.h>
 #include <fluent-bit/flb_metrics.h>
+#include <fluent-bit/flb_info.h>
 #include <msgpack.h>
 
 #include <stdio.h>
@@ -590,6 +591,7 @@ static void cb_file_flush(struct flb_event_chunk *event_chunk,
             ltsv_output(fp, &tm, obj, ctx);
             break;
         case FLB_OUT_FILE_FMT_PLAIN:
+            flb_info("plain_output");
             plain_output(fp, obj, alloc_size);
             break;
         case FLB_OUT_FILE_FMT_TEMPLATE:
@@ -606,6 +608,7 @@ static void cb_file_flush(struct flb_event_chunk *event_chunk,
 
 static int cb_file_exit(void *data, struct flb_config *config)
 {
+    flb_info("cb_file_exit");
     struct flb_file_conf *ctx = data;
 
     if (!ctx) {

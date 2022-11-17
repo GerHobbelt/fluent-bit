@@ -324,7 +324,7 @@ static int process_record(const char *tag, int tag_len, msgpack_object map,
         return FLB_FALSE;
     }
 
-    flb_info("%s process_record tag: %s", ctx->emitter_name, tag);
+    // flb_info("%s process_record tag: %s", ctx->emitter_name, tag);
     *matched = FLB_FALSE;
 
     mk_list_foreach(head, &ctx->rules) {
@@ -410,7 +410,7 @@ static int cb_rewrite_tag_filter(const void *data, size_t bytes,
 
     msgpack_unpacked_init(&result);
 
-    flb_info("%s cb_rewrite_tag_filter tag: %s", ctx->emitter_name, tag);
+    // flb_info("%s cb_rewrite_tag_filter tag: %s", ctx->emitter_name, tag);
 
     while (msgpack_unpack_next(&result, data, bytes, &off) == MSGPACK_UNPACK_SUCCESS) {
         root = result.data;
@@ -443,7 +443,7 @@ static int cb_rewrite_tag_filter(const void *data, size_t bytes,
         pre = off;
     }
 
-    flb_info("%s cb_rewrite_tag_filter_end tag: %s", ctx->emitter_name, tag);
+    // flb_info("%s cb_rewrite_tag_filter_end tag: %s", ctx->emitter_name, tag);
     msgpack_unpacked_destroy(&result);
 
     if (emitted_num == 0) {
