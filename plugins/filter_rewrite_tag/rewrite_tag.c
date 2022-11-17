@@ -409,6 +409,9 @@ static int cb_rewrite_tag_filter(const void *data, size_t bytes,
     msgpack_packer_init(&mp_pck, &mp_sbuf, msgpack_sbuffer_write);
 
     msgpack_unpacked_init(&result);
+
+    flb_info("%s cb_rewrite_tag_filter tag: %s", ctx->emitter_name, tag);
+
     while (msgpack_unpack_next(&result, data, bytes, &off) == MSGPACK_UNPACK_SUCCESS) {
         root = result.data;
         map = root.via.array.ptr[1];
@@ -439,6 +442,8 @@ static int cb_rewrite_tag_filter(const void *data, size_t bytes,
         /* Adjust previous offset */
         pre = off;
     }
+
+    flb_info("%s cb_rewrite_tag_filter_end tag: %s", ctx->emitter_name, tag);
     msgpack_unpacked_destroy(&result);
 
     if (emitted_num == 0) {
