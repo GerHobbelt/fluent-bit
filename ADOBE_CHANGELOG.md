@@ -16,6 +16,9 @@ A stands for Adobe's changes
 
 # Log
 
+## 1.9.2-0.7.1-adobe
+- rebuilt from v1.9.2
+
 ## 1.9.2-0.7.0-adobe
 - built from v1.9.2
 
