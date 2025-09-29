@@ -390,6 +390,9 @@ int load_data(struct platform_log_ctx *ctx)
         return -1;
     }
 
+    flb_plg_debug(ctx->ins, "clearing cache...");
+    cache_clear(ctx->cache);
+
     msgpack_unpacked result;
     size_t off = 0;
     msgpack_unpacked_init(&result);
@@ -1152,8 +1155,7 @@ static int cb_pl_filter(const void *data, size_t bytes,
         flb_plg_debug(ctx->ins, "delta %i", delta);
         if (delta == 410) {
             int full;
-            flb_plg_debug(ctx->ins, "delta returned %i, clearing cache and reloading full", delta);
-            cache_clear(ctx->cache);
+            flb_plg_debug(ctx->ins, "delta returned %i, reloading full cache", delta);
             full = load_data(ctx);
             flb_plg_debug(ctx->ins, "full load result %i", full);
         }

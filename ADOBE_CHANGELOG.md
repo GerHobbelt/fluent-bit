@@ -16,6 +16,9 @@ A stands for Adobe's changes
 
 # Log
 
+## _unreleased_
+- clear cache after k8s API call is successful
+
 ## 1.9.2-0.7.1-adobe
 - rebuilt from v1.9.2
 
