@@ -23,6 +23,7 @@ struct k8s_conf {
     char *token_file;
     char *token;
     size_t token_len;
+    time_t token_exp_time;
 
     /* Pre-formatted HTTP Authorization header value */
     char *auth;

@@ -1,6 +1,8 @@
 #include <fluent-bit/flb_filter_plugin.h>
 #include <fluent-bit/flb_http_client.h>
 #include <fluent-bit/flb_pack.h>
+#include <mbedtls/base64.h>
+#include <mbedtls/error.h>
 
 #include <sys/stat.h>
 
@@ -48,6 +50,201 @@ static int file_to_buffer(const char *path,
     return 0;
 }
 
+static int get_token_exp_time(struct k8s_conf *k8s, char *tk, size_t tk_size, time_t *exp)
+{
+    /*
+     * Using standard Base64 decoding functions with JWT requires:
+     *
+     * - replacing '-' with '+'  // 62nd char of encoding
+     * - replacing '_' with '/'  // 63rd char of encoding
+     * - adding proper = padding // Pad with trailing '='s
+     *
+     * ref: https://www.rfc-editor.org/rfc/rfc7515.txt Appendix C
+     * largely stolen from https://github.com/fluent/fluent-bit/blob/d21e8de3cdfbcbd84f3f65b4e0ac635de5b1bcbf/lib/librdkafka-2.10.1/src/rdkafka_sasl_oauthbearer_oidc.c#L117
+     *
+     * JWT token format: Header.Payload.Signature
+     * expiration time (exp) is in the Payload
+     */
+    char *converted_src;
+    char *payload = NULL;
+
+    int padding;
+
+    int payload_len;
+    int payload_start = 0;
+    int payload_end   = 0;
+
+    converted_src = flb_malloc(tk_size);
+
+    for (int i = 0; i < tk_size; i++) {
+        switch (tk[i]) {
+            case '-':
+                converted_src[i] = '+';
+                break;
+            case '_':
+                converted_src[i] = '/';
+                break;
+            case '.':
+                if (payload_start == 0)
+                    payload_start = i + 1;
+                else {
+                    if (payload_end > 0) {
+                        flb_plg_debug(k8s->ins, "(jwt) invalid token: too many parts");
+                        flb_free(converted_src);
+                        return -1;
+                    }
+                    payload_end = i;
+                }
+                 /* FALLTHRU */
+            default:
+                converted_src[i] = tk[i];
+        }
+    }
+
+    if (payload_start == 0 || payload_end == 0) {
+        flb_plg_debug(k8s->ins, "(jwt) invalid token: no payload");
+        flb_free(converted_src);
+        return -1;
+    }
+
+    flb_plg_debug(k8s->ins, "(jwt) payload_start=%i, payload_end=%i", payload_start, payload_end);
+
+    payload_len = payload_end - payload_start;
+    payload = flb_malloc(payload_len + 4);
+    strncpy(payload, (converted_src + payload_start), payload_len);
+    flb_free(converted_src);
+
+    padding = 4 - (payload_len % 4);
+    if (padding < 4) {
+        while (padding--)
+            payload[payload_len++] = '=';
+    }
+
+    /* standard base64 decode */
+    int ret;
+    size_t b64_len;
+    unsigned char *b64_buf;
+
+    b64_buf = flb_malloc(payload_len * 2);
+
+    ret = mbedtls_base64_decode(b64_buf, payload_len * 2,
+                                &b64_len,
+                                (unsigned char *)payload,
+                                payload_len);
+    flb_free(payload);
+
+    if (ret != 0) {
+        char err_buf[72];
+        mbedtls_strerror(ret, err_buf, sizeof(err_buf));
+        flb_plg_error(k8s->ins, "error decoding JWT payload: %s", err_buf);
+        flb_free(b64_buf);
+        return -1;
+    }
+
+    /* pack the resulting json */
+    int root_type;
+    char *buf;
+    size_t size;
+    ret = flb_pack_json((char*)b64_buf, b64_len, &buf, &size, &root_type);
+    flb_free(b64_buf);
+    flb_plg_debug(k8s->ins, "(jwt) flb_pack_json result: %i", ret);
+    if (ret == -1) {
+        flb_plg_error(k8s->ins, "error packing JWT payload");
+        flb_free(buf);
+        return -1;
+    }
+
+    /* finally, retrieve the expiration time */
+    msgpack_unpacked result;
+    size_t off = 0;
+    msgpack_unpacked_init(&result);
+    ret = msgpack_unpack_next(&result, buf, size, &off);
+    flb_plg_debug(k8s->ins, "(jwt) msgpack_unpack_next %i", ret);
+    if (ret != MSGPACK_UNPACK_SUCCESS) {
+        return -1;
+    }
+
+    msgpack_object *exp_obj = NULL;
+
+    msgpack_object_map *map = &result.data.via.map;
+    for (int i = 0; i < map->size; i++) {
+        if (strncasecmp("exp", map->ptr[i].key.via.str.ptr, map->ptr[i].key.via.str.size) == 0) {
+            exp_obj = &map->ptr[i].val;
+            break;
+        }
+    }
+
+    if (exp_obj == NULL) {
+        flb_plg_error(k8s->ins, "JWT expire time not found");
+        msgpack_unpacked_destroy(&result);
+        flb_free(buf);
+        return -1;
+    }
+    if (exp_obj->type != MSGPACK_OBJECT_POSITIVE_INTEGER) {
+        flb_plg_error(k8s->ins, "invalid JWT expire time value type=%i", exp_obj->type);
+        msgpack_unpacked_destroy(&result);
+        flb_free(buf);
+        return -1;
+    }
+
+    time_t t = exp_obj->via.i64;
+    flb_plg_debug(k8s->ins, "(jwt) exp=%i", t);
+
+    msgpack_unpacked_destroy(&result);
+    flb_free(buf);
+
+    *exp = t;
+
+    return 0;
+}
+
+static int compute_auth_header(struct k8s_conf *k8s)
+{
+    int ret;
+    char *tk = NULL;
+    size_t tk_size = 0;
+
+    ret = file_to_buffer(k8s->token_file, &tk, &tk_size);
+    if (ret != 0) {
+        flb_free(tk);
+        return -1;
+    }
+
+    if (k8s->auth) {
+        flb_free(k8s->auth);
+    }
+
+    k8s->auth = flb_malloc(tk_size + 32);
+    k8s->auth_len = snprintf(k8s->auth, tk_size + 32, "Bearer %s", tk);
+
+    time_t exp;
+    ret = get_token_exp_time(k8s, tk, tk_size, &exp);
+    if (ret != 0) {
+        flb_plg_error(k8s->ins, "error extracting expiration time from token, assuming 5min");
+        exp = time(NULL) + 300;
+    }
+    k8s->token_exp_time = exp;
+    flb_plg_debug(k8s->ins, "token_exp_time=%i", k8s->token_exp_time);
+
+    flb_free(tk);
+
+    return 0;
+}
+
+static void check_token_expired(struct k8s_conf *k8s)
+{
+    int ret;
+
+    flb_plg_debug(k8s->ins, "checking token expire=%i", k8s->token_exp_time);
+    if (time(NULL) > k8s->token_exp_time - 300) { /* expired or expire in 5min */
+        flb_plg_info(k8s->ins, "reloading auth token: expire %i", k8s->token_exp_time);
+        ret = compute_auth_header(k8s);
+        if (ret != 0) {
+            flb_plg_error(k8s->ins, "unable to compute auth header");
+        }
+    }
+}
+
 struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *config)
 {
     int ret;
@@ -64,24 +261,20 @@ struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *
         return NULL;
     }
 
+    k8s->ins = ins;
+
     flb_plg_debug(ins, "k8s_api=%s:%i (use_tls=%i)", k8s->api_host, k8s->api_port, k8s->use_tls);
     flb_plg_debug(ins, "k8s_tls_ca_file=%s", k8s->tls_ca_file);
     flb_plg_debug(ins, "k8s_token_file=%s", k8s->token_file);
 
     /* compute HTTP Authorization header */
-    char *tk = NULL;
-    size_t tk_size = 0;
-    ret = file_to_buffer(k8s->token_file, &tk, &tk_size);
+    ret = compute_auth_header(k8s);
     if (ret != 0) {
-        flb_free(tk);
+        flb_plg_error(ins, "unable to compute auth header");
         k8s_destroy(k8s);
         return NULL;
     }
-
-    k8s->auth = flb_malloc(tk_size + 32);
-    k8s->auth_len = snprintf(k8s->auth, tk_size + 32, "Bearer %s", tk);
-
-    flb_free(tk);
+    flb_plg_debug(ins, "HTTP auth header computed...");
 
     /* initialize network - inline here but could be split out for lazy-init */
     /* stolen from to plugins/filter_kubernetes/kube_meta.c:flb_kube_network_init() */
@@ -114,8 +307,6 @@ struct k8s_conf *k8s_create(struct flb_filter_instance *ins, struct flb_config *
     /* Remove async flag from upstream */
     k8s->upstream->flags &= ~(FLB_IO_ASYNC);
 
-    k8s->ins = ins;
-
     return k8s;
 }
 
@@ -138,6 +329,8 @@ int k8s_http_get(struct k8s_conf *k8s, const char *uri, char **out_buf, size_t *
 {
     struct flb_http_client *c;
     struct flb_upstream_conn *u_conn;
+
+    check_token_expired(k8s);
 
     u_conn = flb_upstream_conn_get(k8s->upstream);
     if (!u_conn) {

@@ -18,6 +18,7 @@ A stands for Adobe's changes
 
 ## _unreleased_
 - clear cache after k8s API call is successful
+- reload expired auth token
 
 ## 1.9.2-0.7.1-adobe
 - rebuilt from v1.9.2
