@@ -900,9 +900,10 @@ static inline int re_emit(msgpack_object ts, msgpack_object map,
 
     /* info is a map: {index=>"idx", name=>"server"} */
     /* add the index, use the name as a tag to re-emit the record */
-    msgpack_object *index, *name;
+    msgpack_object *index, *name, *src_type;
     index = helper_msgpack_map_get("index", &info.via.map);
     name = helper_msgpack_map_get("name", &info.via.map);
+    src_type = helper_msgpack_map_get("sourceType", &info.via.map);
 
     if (!(index && name)) {
         flb_plg_debug(ctx->ins, "(emit) no splunk info, ignoring...");
@@ -920,8 +921,9 @@ static inline int re_emit(msgpack_object ts, msgpack_object map,
     msgpack_pack_array(&packer, 2);
     msgpack_pack_object(&packer, ts);
 
-    /* existing map + index map (from info map) + src map */
-    msgpack_pack_map(&packer, map.via.map.size + 2);
+    /* existing map + index map (from info map) + src map + sourceType map if provided */
+    int extra_info = src_type ? 3 : 2;
+    msgpack_pack_map(&packer, map.via.map.size + extra_info);
 
     /* existing map */
     for (i = 0; i < map.via.map.size; i++) {
@@ -935,6 +937,12 @@ static inline int re_emit(msgpack_object ts, msgpack_object map,
     msgpack_pack_str(&packer, index->via.str.size);
     msgpack_pack_str_body(&packer, index->via.str.ptr, index->via.str.size);
 
+    if (src_type) {
+        msgpack_pack_str(&packer, PLATFORM_LOG_SRC_TYPE_KEY_LEN);
+        msgpack_pack_str_body(&packer, PLATFORM_LOG_SRC_TYPE_KEY, PLATFORM_LOG_SRC_TYPE_KEY_LEN);
+        msgpack_pack_str(&packer, src_type->via.str.size);
+        msgpack_pack_str_body(&packer, src_type->via.str.ptr, src_type->via.str.size);
+    }
 
     /* src map */
     // TODO: cache this in ctx?

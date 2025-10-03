@@ -106,7 +106,7 @@ void cache_dump(struct cache *cache)
 
     int ret;
     flb_sds_t buf;
-    size_t size = 128; //should be enough to hold {index->foo, name->bar}
+    size_t size = 256; //should be enough to hold {index->foo, name->bar, sourceType->baz}
     buf = flb_sds_create_size(size);
     if (!buf) {
         flb_plg_debug(cache->ins, "cache dump not available");

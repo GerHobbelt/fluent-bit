@@ -23,9 +23,10 @@
 #define PLATFORM_LOG_AUDIT_KEY         "audit"
 #define PLATFORM_LOG_AUDIT_KEY_LEN     5
 
-/* source or sourcetype: need standard! */
 #define PLATFORM_LOG_SRC_KEY           "source"
 #define PLATFORM_LOG_SRC_KEY_LEN       6
+#define PLATFORM_LOG_SRC_TYPE_KEY      "sourcetype"
+#define PLATFORM_LOG_SRC_TYPE_KEY_LEN  10
 
 /* TODO: retire this if not needed */
 #define PLATFORM_LOG_INDEX_KEY         "index"
