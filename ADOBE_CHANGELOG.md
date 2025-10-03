@@ -16,7 +16,7 @@ A stands for Adobe's changes
 
 # Log
 
-## _unreleased_
+## 1.9.2-0.8.0-adobe
 - clear cache after k8s API call is successful
 - reload expired auth token
 - added support `sourceType`
